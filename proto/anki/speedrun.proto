@@ -1,0 +1,35 @@
+// Copyright: Ankitects Pty Ltd and contributors
+// License: GNU AGPL, version 3 or later; http://www.gnu.org/licenses/agpl.html
+
+syntax = "proto3";
+
+option java_multiple_files = true;
+
+package anki.speedrun;
+
+// Speedrun read-only analytics. Read-only: no collection mutation, no undo.
+service SpeedrunService {
+  // Report how many of the supplied exam-profile topic tags are present in the
+  // collection (hierarchical prefix match), plus the engine version string.
+  rpc GetCoverage(GetCoverageRequest) returns (CoverageResponse);
+}
+
+// Required: get_services() asserts one Backend<Name>Service per <Name>Service.
+// Empty body => all SpeedrunService methods auto-delegate to the collection impl.
+service BackendSpeedrunService {}
+
+message GetCoverageRequest {
+  // Exam-profile topic tags to check for, e.g. "calc", "calc::integration".
+  repeated string required_tags = 1;
+}
+
+message CoverageResponse {
+  // Number of required_tags present in the collection (by prefix match).
+  uint32 covered = 1;
+  // Total number of required_tags supplied.
+  uint32 total = 2;
+  // covered / total * 100, or 0.0 when total == 0.
+  double percent = 3;
+  // rslib version (crate::version::version()); proves which engine answered.
+  string backend_version = 4;
+}
