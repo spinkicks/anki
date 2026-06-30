@@ -85,6 +85,7 @@ from anki.scheduler.dummy import DummyScheduler
 from anki.scheduler.v3 import Scheduler as V3Scheduler
 from anki.sync import SyncAuth, SyncOutput, SyncStatus
 from anki.tags import TagManager
+from anki.speedrun import SpeedrunManager
 from anki.utils import (
     from_json_bytes,
     ids2str,
@@ -158,6 +159,7 @@ class Collection(DeprecatedNamesMixin):
         self.models = ModelManager(self)
         self.decks = DeckManager(self)
         self.tags = TagManager(self)
+        self.speedrun = SpeedrunManager(self)
         self.conf = ConfigManager(self)
         self._load_scheduler()
         self._startReps = 0
