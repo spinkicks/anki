@@ -1,0 +1,45 @@
+{
+    "_comment": "Speedrun starter hooks for the anki fork. Rename to settings.json at Phase 0 AFTER the build env works (these commands require ./ninja + cargo). Validate against current Claude Code hooks schema (code.claude.com/docs/en/hooks). Guard against formatter re-entry and Stop-loop (check stop_hook_active).",
+    "hooks": {
+        "PreToolUse": [
+            {
+                "matcher": "Bash",
+                "hooks": [
+                    {
+                        "type": "command",
+                        "command": "python tools/speedrun_guard.py --deny-rm-rf --deny-raw-sql-outside storage/ --deny-proto-renumber"
+                    }
+                ]
+            },
+            {
+                "matcher": "Edit|Write",
+                "hooks": [
+                    {
+                        "type": "command",
+                        "command": "python tools/speedrun_guard.py --deny-test-edits --deny-eval-holdout"
+                    }
+                ]
+            }
+        ],
+        "PostToolUse": [
+            {
+                "matcher": "Edit|Write",
+                "hooks": [
+                    { "type": "command", "command": "python tools/speedrun_format.py" }
+                ]
+            }
+        ],
+        "Stop": [
+            {
+                "hooks": [
+                    { "type": "command", "command": "python tools/speedrun_stopgate.py" }
+                ]
+            }
+        ]
+    },
+    "_hook_scripts_to_create_at_phase0": {
+        "tools/speedrun_format.py": "reads tool_input.file_path from stdin JSON; runs ./ninja format (or cargo fmt / ruff / prettier) on .rs/.py/.svelte/.ts; emits lint errors back as additionalContext, not just a block",
+        "tools/speedrun_guard.py": "PreToolUse denials: rm -rf; raw SQL writes outside storage/; .proto field-number edits; edits to *_test.rs/tests/ paths and eval/holdout/ (anti-gaming) unless human flag set",
+        "tools/speedrun_stopgate.py": "runs ./ninja check for the touched stack; returns {\"decision\":\"block\",\"reason\":\"...\"} on failure; checks stop_hook_active to avoid infinite loop"
+    }
+}
