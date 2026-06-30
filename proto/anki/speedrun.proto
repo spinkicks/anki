@@ -15,7 +15,8 @@ service SpeedrunService {
 }
 
 // Required: get_services() asserts one Backend<Name>Service per <Name>Service.
-// Empty body => all SpeedrunService methods auto-delegate to the collection impl.
+// Empty body => all SpeedrunService methods auto-delegate to the collection
+// impl.
 service BackendSpeedrunService {}
 
 message GetCoverageRequest {
