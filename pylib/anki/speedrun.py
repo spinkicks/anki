@@ -12,6 +12,7 @@ from anki import speedrun_pb2
 # public export
 CoverageResponse = speedrun_pb2.CoverageResponse
 TopicMasteryResponse = speedrun_pb2.TopicMasteryResponse
+ExamProfileResponse = speedrun_pb2.ExamProfileResponse
 
 
 class SpeedrunManager:
@@ -38,3 +39,12 @@ class SpeedrunManager:
             mastery_threshold=mastery_threshold,
             min_reviews=min_reviews,
         )
+
+    def exam_profile(self, exam_id: str = "gre_math") -> ExamProfileResponse:
+        """Read the exam-profile JSON stored in the synced collection config."""
+        return self.col._backend.get_exam_profile(exam_id=exam_id)
+
+    def set_exam_profile(self, profile_json: str, exam_id: str = "gre_math") -> None:
+        """Store the exam-profile JSON in the synced collection config
+        (uses the existing config API — a normal undoable config write)."""
+        self.col.set_config(f"speedrun:exam_profile:{exam_id}", profile_json)

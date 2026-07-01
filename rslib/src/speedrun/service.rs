@@ -107,4 +107,19 @@ impl crate::services::SpeedrunService for Collection {
             backend_version: crate::version::version().to_string(),
         })
     }
+
+    fn get_exam_profile(
+        &mut self,
+        input: anki_proto::speedrun::GetExamProfileRequest,
+    ) -> error::Result<anki_proto::speedrun::ExamProfileResponse> {
+        let exam_id = if input.exam_id.is_empty() {
+            "gre_math".to_string()
+        } else {
+            input.exam_id.clone()
+        };
+        Ok(anki_proto::speedrun::ExamProfileResponse {
+            profile_json: self.speedrun_exam_profile_json(&exam_id),
+            exam_id,
+        })
+    }
 }

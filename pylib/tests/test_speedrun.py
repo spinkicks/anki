@@ -57,3 +57,16 @@ def test_topic_mastery_abstains_and_is_read_only():
         assert col.db.scalar("pragma integrity_check") == "ok"
     finally:
         col.close()
+
+
+def test_exam_profile_round_trips_via_config():
+    col = getEmptyCol()
+    try:
+        assert col.speedrun.exam_profile("gre_math").profile_json == ""
+        col.speedrun.set_exam_profile('{"exam_id":"gre_math","topics":[]}')
+        resp = col.speedrun.exam_profile("gre_math")
+        assert resp.exam_id == "gre_math"
+        assert '"exam_id":"gre_math"' in resp.profile_json
+        assert col.db.scalar("pragma integrity_check") == "ok"
+    finally:
+        col.close()
