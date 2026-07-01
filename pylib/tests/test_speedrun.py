@@ -31,3 +31,29 @@ def test_coverage_rpc_end_to_end():
         assert col.db.scalar("pragma integrity_check") == "ok"
     finally:
         col.close()
+
+
+def test_topic_mastery_abstains_and_is_read_only():
+    col = getEmptyCol()
+    try:
+        # A note tagged calc::limits, never reviewed => no memory state.
+        note = col.new_note(col.models.by_name("Basic"))
+        note["Front"] = "definition of a limit"
+        note["Back"] = "epsilon-delta"
+        note.tags = ["calc::limits"]
+        col.add_note(note, DeckId(1))
+
+        resp = col.speedrun.topic_mastery(["calc::limits", "linear_algebra::eigen"])
+        assert len(resp.topics) == 2
+        limits = resp.topics[0]
+        assert limits.topic == "calc::limits"
+        assert limits.cards_with_data == 0
+        assert limits.graded_reviews == 0
+        assert limits.abstained is True
+        assert (limits.mastered_lower, limits.mastered_upper) == (0.0, 1.0)
+        assert resp.backend_version  # proves OUR rslib answered
+
+        # Read-only RPC must not have touched the DB.
+        assert col.db.scalar("pragma integrity_check") == "ok"
+    finally:
+        col.close()
