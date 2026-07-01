@@ -1,0 +1,14 @@
+# Copyright: Ankitects Pty Ltd and contributors
+# License: GNU AGPL, version 3 or later; http://www.gnu.org/licenses/agpl.html
+[project]
+name = "speedrun-content"
+version = "0.1.0"
+description = "Deterministic (non-AI) GRE-Math content tooling for Speedrun: exam profile, seed deck, scraper."
+requires-python = ">=3.9"
+dependencies = [
+    "genanki==0.13.1",
+    "pyyaml==6.0.2",
+]
+
+[dependency-groups]
+dev = ["pytest==8.3.4"]
