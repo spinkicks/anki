@@ -767,6 +767,11 @@ exposed_backend_list = [
     # DeckConfigService
     "get_ignored_before_count",
     "get_retention_workload",
+    # SpeedrunService
+    "get_coverage",
+    "get_topic_mastery",
+    "get_exam_profile",
+    "get_performance_readiness",
 ]
 
 

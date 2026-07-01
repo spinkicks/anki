@@ -312,6 +312,26 @@ mod test {
     }
 
     #[test]
+    fn exam_profile_defaults_to_baked_in_gre_math_when_unset() -> Result<()> {
+        let col = Collection::new();
+        // fresh collection, nothing stored:
+        let json = col.speedrun_exam_profile_json("gre_math");
+        assert!(
+            !json.is_empty(),
+            "fresh collection must return a default profile"
+        );
+        assert!(
+            json.contains("\"exam_id\""),
+            "default must be the exam profile JSON"
+        );
+        assert!(
+            json.contains("calc"),
+            "default must contain the calc topics"
+        );
+        Ok(())
+    }
+
+    #[test]
     fn reorder_new_plain_is_noop() -> Result<()> {
         use anki_proto::speedrun::AblationMode;
         let mut col = Collection::new();

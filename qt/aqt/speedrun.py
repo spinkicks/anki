@@ -2,6 +2,7 @@
 # License: GNU AGPL, version 3 or later; http://www.gnu.org/licenses/agpl.html
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import Any
 
 import aqt
@@ -19,7 +20,7 @@ class SpeedrunMemory(QDialog):
         self.name = "speedrunMemory"
         self.setWindowTitle("Speedrun: Memory")
         disable_help_button(self)
-        self.web = AnkiWebView(kind=AnkiWebViewKind.DEFAULT)
+        self.web = AnkiWebView(kind=AnkiWebViewKind.SPEEDRUN)
         layout = QVBoxLayout()
         layout.setContentsMargins(0, 0, 0, 0)
         layout.addWidget(self.web)
@@ -34,6 +35,10 @@ class SpeedrunMemory(QDialog):
         aqt.dialogs.markClosed("SpeedrunMemory")
         QDialog.reject(self)
 
+    def closeWithCallback(self, callback: Callable[[], None]) -> None:
+        self.reject()
+        callback()
+
 
 class SpeedrunHome(QDialog):
     def __init__(self, mw: aqt.main.AnkiQt) -> None:
@@ -43,7 +48,7 @@ class SpeedrunHome(QDialog):
         self.name = "speedrunHome"
         self.setWindowTitle("Speedrun: Home")
         disable_help_button(self)
-        self.web = AnkiWebView(kind=AnkiWebViewKind.DEFAULT)
+        self.web = AnkiWebView(kind=AnkiWebViewKind.SPEEDRUN)
         self.web.set_bridge_command(self._on_bridge_cmd, self)
         layout = QVBoxLayout()
         layout.setContentsMargins(0, 0, 0, 0)
@@ -74,3 +79,7 @@ class SpeedrunHome(QDialog):
         saveGeom(self, self.name)
         aqt.dialogs.markClosed("SpeedrunHome")
         QDialog.reject(self)
+
+    def closeWithCallback(self, callback: Callable[[], None]) -> None:
+        self.reject()
+        callback()

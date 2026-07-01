@@ -62,7 +62,10 @@ def test_topic_mastery_abstains_and_is_read_only():
 def test_exam_profile_round_trips_via_config():
     col = getEmptyCol()
     try:
-        assert col.speedrun.exam_profile("gre_math").profile_json == ""
+        # A fresh collection now bootstraps the baked-in default (FIX 3), so the
+        # profile is non-empty even before anything is stored. A stored profile
+        # still wins and round-trips via config.
+        assert col.speedrun.exam_profile("gre_math").profile_json != ""
         col.speedrun.set_exam_profile('{"exam_id":"gre_math","topics":[]}')
         resp = col.speedrun.exam_profile("gre_math")
         assert resp.exam_id == "gre_math"
@@ -101,5 +104,29 @@ def test_performance_readiness_is_scaffolding_and_abstains():
         assert resp.topics[0].performance.abstained is True
         assert resp.topics[0].readiness.abstained is True
         assert resp.overall_readiness.abstained is True
+    finally:
+        col.close()
+
+
+def test_fresh_collection_exam_profile_bootstraps_and_pages_have_data():
+    col = getEmptyCol()
+    try:
+        # FIX 3: fresh collection resolves a non-empty, parseable profile
+        resp = col.speedrun.exam_profile("gre_math")
+        assert resp.profile_json != "", (
+            "fresh collection must bootstrap a default profile"
+        )
+        import json as _json
+
+        prof = _json.loads(resp.profile_json)
+        assert prof["exam_id"] == "gre_math"
+        assert len(prof["topics"]) > 0
+        # the topic ids drive getTopicMastery; prove that call returns rows (abstaining on a fresh deck)
+        leaf_ids = [t["id"] for t in prof["topics"] if t["ets_weight"] > 0]
+        mastery = col.speedrun.topic_mastery(leaf_ids)
+        assert len(mastery.topics) == len(leaf_ids)
+        assert all(t.abstained for t in mastery.topics), (
+            "fresh deck: every topic abstains honestly"
+        )
     finally:
         col.close()
