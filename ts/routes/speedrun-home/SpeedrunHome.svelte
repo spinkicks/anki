@@ -8,7 +8,7 @@ dynamic content is honest/derived (no fake session/PB); a fresh deck abstains
 calmly. Reuses the frozen SpeedrunService RPCs via @speedrun/data.
 -->
 <script lang="ts">
-    import { onMount } from "svelte";
+    import { onDestroy, onMount } from "svelte";
 
     import ActionBar from "./ActionBar.svelte";
     import { type HomeView, loadHome } from "./data";
@@ -21,6 +21,18 @@ calmly. Reuses the frozen SpeedrunService RPCs via @speedrun/data.
     let error = "";
     // "" -> profile loaded; set when loadHome returns null (no matching profile).
     let noProfile = false;
+
+    // Inline START RUN status banner. The Qt shell drives this via web.eval
+    // (window.speedrunStartStatus) when it can't launch study: "importNeeded"
+    // (exam deck missing) or "caughtUp" (nothing due; optional n = new cards
+    // that unlock next). Null = hidden. pycmd is injected by the Anki webview
+    // (not in the SvelteKit TS scope), so we cast when reaching for it.
+    type StartStatus = { state: string; n?: number };
+    let startStatus: StartStatus | null = null;
+
+    function fire(cmd: string) {
+        (globalThis as { pycmd?: (cmd: string) => void }).pycmd?.(cmd);
+    }
 
     async function refresh() {
         loading = true;
@@ -37,10 +49,58 @@ calmly. Reuses the frozen SpeedrunService RPCs via @speedrun/data.
             loading = false;
         }
     }
-    onMount(refresh);
+
+    onMount(() => {
+        (
+            globalThis as {
+                speedrunStartStatus?: (state: string, n?: number) => void;
+            }
+        ).speedrunStartStatus = (state, n) => {
+            startStatus = { state, n };
+        };
+        refresh();
+    });
+    onDestroy(() => {
+        delete (globalThis as { speedrunStartStatus?: unknown }).speedrunStartStatus;
+    });
 </script>
 
 <div class="app">
+    {#if startStatus}
+        <div class="startstatus" role="status">
+            <div class="startstatus-body">
+                {#if startStatus.state === "importNeeded"}
+                    <span class="startstatus-text">
+                        Import the GRE exam deck to start a run.
+                    </span>
+                    <button
+                        class="startstatus-btn"
+                        on:click={() => fire("startrun:import")}
+                    >
+                        Import deck
+                    </button>
+                {:else if startStatus.state === "caughtUp"}
+                    <span class="startstatus-text">
+                        All caught up for today.{#if startStatus.n && startStatus.n > 0}{" "}{startStatus.n}
+                            new cards will unlock next.{/if}
+                    </span>
+                    <button
+                        class="startstatus-btn"
+                        on:click={() => fire("startrun:customstudy")}
+                    >
+                        Custom Study
+                    </button>
+                {/if}
+            </div>
+            <button
+                class="startstatus-close"
+                aria-label="Dismiss"
+                on:click={() => (startStatus = null)}
+            >
+                ✕
+            </button>
+        </div>
+    {/if}
     {#if loading}
         <div class="spinner">Loading…</div>
     {:else if error}
@@ -136,5 +196,91 @@ calmly. Reuses the frozen SpeedrunService RPCs via @speedrun/data.
     .memory-link a:hover,
     .memory-link a:focus-visible {
         color: var(--fg);
+    }
+
+    /* START RUN status banner (flat/sharp; tokens only). Driven by the Qt
+       shell via window.speedrunStartStatus when it can't launch study. */
+    .startstatus {
+        display: flex;
+        align-items: stretch;
+        gap: 12px;
+        padding: 12px 16px;
+        background: var(--panel);
+        border-bottom: 1px solid var(--line);
+        border-left: 3px solid var(--pace);
+    }
+    @media (min-width: 768px) {
+        .startstatus {
+            padding: 14px 28px;
+        }
+    }
+    .startstatus-body {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        align-items: flex-start;
+    }
+    @media (min-width: 768px) {
+        .startstatus-body {
+            flex-direction: row;
+            align-items: center;
+            gap: 16px;
+        }
+    }
+    .startstatus-text {
+        font-family: var(--mono);
+        font-size: 12px;
+        letter-spacing: 0.06em;
+        color: var(--fg);
+        text-transform: uppercase;
+        line-height: 1.5;
+    }
+    .startstatus-btn {
+        font-family: var(--mono);
+        font-weight: 600;
+        font-size: 12px;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        background: var(--pace);
+        color: var(--ink);
+        border: none;
+        /* Full-width, ≥44px tall touch target on mobile. */
+        width: 100%;
+        min-height: 44px;
+        padding: 12px 18px;
+        cursor: pointer;
+    }
+    @media (min-width: 768px) {
+        .startstatus-btn {
+            width: auto;
+            min-height: 0;
+            padding: 10px 18px;
+        }
+    }
+    .startstatus-btn:focus-visible {
+        outline: 2px solid var(--fg);
+        outline-offset: 2px;
+    }
+    .startstatus-close {
+        flex: 0 0 auto;
+        font-family: var(--mono);
+        font-size: 14px;
+        line-height: 1;
+        background: transparent;
+        color: var(--muted);
+        border: 1px solid var(--line);
+        /* ≥44px touch target. */
+        min-width: 44px;
+        min-height: 44px;
+        cursor: pointer;
+    }
+    .startstatus-close:hover,
+    .startstatus-close:focus-visible {
+        color: var(--fg);
+    }
+    .startstatus-close:focus-visible {
+        outline: 2px solid var(--fg);
+        outline-offset: 2px;
     }
 </style>

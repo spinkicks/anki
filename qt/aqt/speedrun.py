@@ -58,21 +58,69 @@ class SpeedrunHome(QDialog):
         self.web.load_sveltekit_page("speedrun-home")
         self.show()
 
+    # The exam deck the run studies. Grounded fact: this is the seed deck name.
+    EXAM_DECK = "Speedrun::GRE Math"
+
     def _on_bridge_cmd(self, cmd: str) -> Any:
-        if cmd == "startrun" or cmd.startswith("startrun:"):
+        if cmd == "startrun:import":
+            self._import_deck()
+        elif cmd == "startrun:customstudy":
+            self._custom_study()
+        elif cmd == "startrun" or cmd.startswith("startrun:"):
             self._start_run()
         elif cmd == "open:memory":
             aqt.dialogs.open("SpeedrunMemory", self.mw)
         return False
 
     def _start_run(self) -> None:
-        # Use "overview" so Anki handles the graceful fallback: if no deck is
-        # selected _overviewState redirects to deckBrowser automatically, and
-        # if a deck *is* selected the user sees the deck overview (card count +
-        # Study button) before entering the reviewer — safer than jumping
-        # straight to "review" which can error when there are no due cards.
+        # Launch REAL study on the exam deck. When it can't (deck missing, or
+        # nothing due), tell the user why IN our page via an honest banner —
+        # never leave them at the bare Anki "Congratulations" deck-browser
+        # dead-end that "overview" produces on a fresh/empty collection.
+        did = self.mw.col.decks.id_for_name(self.EXAM_DECK)
+        if did is None:
+            self.web.eval(
+                "window.speedrunStartStatus"
+                ' && window.speedrunStartStatus("importNeeded");'
+            )
+            return
+        node = self.mw.col.decks.find_deck_in_tree(self.mw.col.decks.deck_tree(), did)
+        due = (
+            0
+            if node is None
+            else (node.new_count + node.review_count + node.learn_count)
+        )
+        if due == 0:
+            new_left = 0 if node is None else node.new_count
+            self.web.eval(
+                "window.speedrunStartStatus"
+                f' && window.speedrunStartStatus("caughtUp", {int(new_left)});'
+            )
+            return
+        self.mw.col.decks.select(did)
         self.close()
-        self.mw.moveToState("overview")
+        self.mw.moveToState("review")
+
+    def _import_deck(self) -> None:
+        # Open Anki's generic File>Import dialog (prompt_for_file_then_import).
+        # We do NOT hardcode the seed .apkg path because it may not exist on a
+        # user's machine; the generic picker is the honest, robust in-app flow.
+        self.mw.onImport()
+
+    def _custom_study(self) -> None:
+        # Select the exam deck (Custom Study operates on the *current* deck via
+        # decks.get_current_id) then open Anki's real Custom Study dialog.
+        did = self.mw.col.decks.id_for_name(self.EXAM_DECK)
+        if did is None:
+            self.web.eval(
+                "window.speedrunStartStatus"
+                ' && window.speedrunStartStatus("importNeeded");'
+            )
+            return
+        self.mw.col.decks.select(did)
+        from aqt.customstudy import CustomStudy
+
+        CustomStudy.fetch_data_and_show(self.mw)
 
     def reject(self) -> None:
         self.web.cleanup()
