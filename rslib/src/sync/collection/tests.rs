@@ -479,6 +479,113 @@ async fn meta_redirect_is_handled() -> Result<()> {
     .await
 }
 
+/// §7b: Two clients each add 10 offline reviews to the SAME card, then sync.
+///
+/// This proves the documented conflict behavior: Anki sync is collection-level
+/// (USN + mtime, latest-wins) and is NOT a per-card merge, but the revlog table
+/// is append-only — each review has a distinct ms-timestamp `id`, so distinct
+/// reviews from both clients coexist rather than one side clobbering the other.
+///
+/// We seed both collections from a single upload/download (so both reference the
+/// same card id), add 10 pending revlog entries (usn=-1) on each side with
+/// disjoint ids, and sync up-then-reconcile. All 20 entries should land on both
+/// sides, with no DB corruption.
+#[tokio::test]
+async fn speedrun_two_way_reviews_and_same_card_conflict() -> Result<()> {
+    with_active_server(|client| async move {
+        let ctx = SyncTestContext::new(client);
+        // Seed both collections from one upload/download so they share one card.
+        upload_download(&ctx).await?;
+
+        let mut col1 = ctx.col1();
+        let mut col2 = ctx.col2();
+
+        // The single card created by col1_setup(), now present on both sides.
+        let card = col1.search_cards("", SortMode::NoOrder)?[0];
+        assert_eq!(card, col2.search_cards("", SortMode::NoOrder)?[0]);
+
+        // 10 offline reviews on col1 and 10 on col2 of the SAME card. usn=-1
+        // marks them pending-sync; disjoint ids (1000.. vs 2000..) so uniquify
+        // never remaps them. add_revlog_entry(entry, uniquify=false) mirrors how
+        // the sync chunk applier (merge_revlog) inserts incoming entries.
+        for i in 0..10 {
+            col1.storage.add_revlog_entry(
+                &RevlogEntry {
+                    id: RevlogId(1_000 + i),
+                    cid: card,
+                    usn: Usn(-1),
+                    interval: i as i32,
+                    ..Default::default()
+                },
+                false,
+            )?;
+        }
+        for i in 0..10 {
+            col2.storage.add_revlog_entry(
+                &RevlogEntry {
+                    id: RevlogId(2_000 + i),
+                    cid: card,
+                    usn: Usn(-1),
+                    interval: i as i32,
+                    ..Default::default()
+                },
+                false,
+            )?;
+        }
+
+        // Sanity: each side sees only its own 10 before syncing.
+        assert_eq!(col1.storage.get_revlog_entries_for_card(card)?.len(), 10);
+        assert_eq!(col2.storage.get_revlog_entries_for_card(card)?.len(), 10);
+
+        // col1 uploads its 10; col2 uploads its 10 and pulls col1's 10 down;
+        // col1 then pulls col2's 10 down. Append-only revlog => union of both.
+        ctx.normal_sync(&mut col1).await;
+        ctx.normal_sync(&mut col2).await;
+        ctx.normal_sync(&mut col1).await;
+
+        // All 20 distinct revlog entries land on both sides.
+        let n1 = col1.storage.get_revlog_entries_for_card(card)?.len();
+        let n2 = col2.storage.get_revlog_entries_for_card(card)?.len();
+        assert_eq!(n1, 20, "col1 should have all 20 revlog entries");
+        assert_eq!(n2, 20, "col2 should have all 20 revlog entries");
+
+        // The exact set of ids matches on both sides (no clobber, no dupes).
+        let mut ids1: Vec<i64> = col1
+            .storage
+            .get_revlog_entries_for_card(card)?
+            .iter()
+            .map(|e| e.id.0)
+            .collect();
+        let mut ids2: Vec<i64> = col2
+            .storage
+            .get_revlog_entries_for_card(card)?
+            .iter()
+            .map(|e| e.id.0)
+            .collect();
+        ids1.sort_unstable();
+        ids2.sort_unstable();
+        let expected: Vec<i64> = (0..10)
+            .map(|i| 1_000 + i)
+            .chain((0..10).map(|i| 2_000 + i))
+            .collect();
+        assert_eq!(ids1, expected, "col1 revlog id set");
+        assert_eq!(ids2, expected, "col2 revlog id set");
+
+        // Firm requirement: no DB corruption after the two-way sync.
+        assert_eq!(
+            col1.storage.db_scalar::<String>("pragma integrity_check")?,
+            "ok"
+        );
+        assert_eq!(
+            col2.storage.db_scalar::<String>("pragma integrity_check")?,
+            "ok"
+        );
+
+        Ok(())
+    })
+    .await
+}
+
 pub(in crate::sync) struct SyncTestContext {
     pub folder: TempDir,
     pub client: HttpSyncClient,
