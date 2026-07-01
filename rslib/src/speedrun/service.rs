@@ -37,10 +37,11 @@ impl crate::services::SpeedrunService for Collection {
         &mut self,
         input: anki_proto::speedrun::GetTopicMasteryRequest,
     ) -> error::Result<anki_proto::speedrun::TopicMasteryResponse> {
-        use crate::speedrun::{
-            topic_aggregate, wilson_interval, MASTERY_THRESHOLD_DEFAULT, MIN_REVIEWS_DEFAULT,
-            WILSON_Z_95,
-        };
+        use crate::speedrun::topic_aggregate;
+        use crate::speedrun::wilson_interval;
+        use crate::speedrun::MASTERY_THRESHOLD_DEFAULT;
+        use crate::speedrun::MIN_REVIEWS_DEFAULT;
+        use crate::speedrun::WILSON_Z_95;
 
         let threshold = if input.mastery_threshold <= 0.0 {
             MASTERY_THRESHOLD_DEFAULT

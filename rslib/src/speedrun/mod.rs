@@ -23,7 +23,8 @@ pub(crate) fn coverage(all_tags: &[String], required: &[String]) -> (u32, u32) {
 
 /// Default retrievability at/above which a card counts as "mastered".
 pub(crate) const MASTERY_THRESHOLD_DEFAULT: f64 = 0.9;
-/// Default minimum graded reviews before a topic reports a (non-abstained) score.
+/// Default minimum graded reviews before a topic reports a (non-abstained)
+/// score.
 pub(crate) const MIN_REVIEWS_DEFAULT: u32 = 20;
 /// z for a 95% two-sided interval.
 pub(crate) const WILSON_Z_95: f64 = 1.96;
@@ -182,7 +183,7 @@ mod test {
         assert_eq!(limits.cards_with_data, 0); // reviewed 0 times => no FSRS state
         assert_eq!(limits.graded_reviews, 0);
         assert!(limits.abstained); // below min_reviews
-        // Full-uncertainty Wilson when no data.
+                                   // Full-uncertainty Wilson when no data.
         assert_eq!((limits.mastered_lower, limits.mastered_upper), (0.0, 1.0));
         assert!(!resp.backend_version.is_empty());
         Ok(())
