@@ -1,18 +1,58 @@
 {
-  "exam_id": "gre_math",
-  "name": "GRE Mathematics Subject Test (Wed subset: Calculus + Linear Algebra)",
-  "version": 1,
-  "topics": [
-    { "id": "calc", "name": "Calculus", "ets_weight": 0.0, "prereqs": [] },
-    { "id": "calc::limits", "name": "Limits & continuity", "ets_weight": 0.10, "prereqs": ["calc"] },
-    { "id": "calc::single_var::differentiation", "name": "Differentiation", "ets_weight": 0.14, "prereqs": ["calc::limits"] },
-    { "id": "calc::single_var::integration", "name": "Integration", "ets_weight": 0.16, "prereqs": ["calc::single_var::differentiation"] },
-    { "id": "calc::sequences_series", "name": "Sequences & series", "ets_weight": 0.10, "prereqs": ["calc::limits"] },
-    { "id": "calc::multivar", "name": "Multivariable calculus", "ets_weight": 0.15, "prereqs": ["calc::single_var::integration"] },
-    { "id": "linear_algebra", "name": "Linear algebra", "ets_weight": 0.0, "prereqs": [] },
-    { "id": "linear_algebra::vector_spaces", "name": "Vector spaces", "ets_weight": 0.08, "prereqs": ["linear_algebra"] },
-    { "id": "linear_algebra::matrices", "name": "Matrices & linear systems", "ets_weight": 0.09, "prereqs": ["linear_algebra::vector_spaces"] },
-    { "id": "linear_algebra::eigen", "name": "Eigenvalues & eigenvectors", "ets_weight": 0.10, "prereqs": ["linear_algebra::matrices"] },
-    { "id": "linear_algebra::linear_maps", "name": "Linear maps & rank", "ets_weight": 0.08, "prereqs": ["linear_algebra::vector_spaces"] }
-  ]
+    "exam_id": "gre_math",
+    "name": "GRE Mathematics Subject Test (Wed subset: Calculus + Linear Algebra)",
+    "version": 1,
+    "topics": [
+        { "id": "calc", "name": "Calculus", "ets_weight": 0.0, "prereqs": [] },
+        { "id": "calc::limits", "name": "Limits & continuity", "ets_weight": 0.10, "prereqs": ["calc"] },
+        {
+            "id": "calc::single_var::differentiation",
+            "name": "Differentiation",
+            "ets_weight": 0.14,
+            "prereqs": ["calc::limits"]
+        },
+        {
+            "id": "calc::single_var::integration",
+            "name": "Integration",
+            "ets_weight": 0.16,
+            "prereqs": ["calc::single_var::differentiation"]
+        },
+        {
+            "id": "calc::sequences_series",
+            "name": "Sequences & series",
+            "ets_weight": 0.10,
+            "prereqs": ["calc::limits"]
+        },
+        {
+            "id": "calc::multivar",
+            "name": "Multivariable calculus",
+            "ets_weight": 0.15,
+            "prereqs": ["calc::single_var::integration"]
+        },
+        { "id": "linear_algebra", "name": "Linear algebra", "ets_weight": 0.0, "prereqs": [] },
+        {
+            "id": "linear_algebra::vector_spaces",
+            "name": "Vector spaces",
+            "ets_weight": 0.08,
+            "prereqs": ["linear_algebra"]
+        },
+        {
+            "id": "linear_algebra::matrices",
+            "name": "Matrices & linear systems",
+            "ets_weight": 0.09,
+            "prereqs": ["linear_algebra::vector_spaces"]
+        },
+        {
+            "id": "linear_algebra::eigen",
+            "name": "Eigenvalues & eigenvectors",
+            "ets_weight": 0.10,
+            "prereqs": ["linear_algebra::matrices"]
+        },
+        {
+            "id": "linear_algebra::linear_maps",
+            "name": "Linear maps & rank",
+            "ets_weight": 0.08,
+            "prereqs": ["linear_algebra::vector_spaces"]
+        }
+    ]
 }

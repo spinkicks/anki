@@ -39,7 +39,8 @@ message CoverageResponse {
 }
 
 message GetTopicMasteryRequest {
-  // Topic ids (hierarchical tags) to score, e.g. "calc::single_var::integration".
+  // Topic ids (hierarchical tags) to score, e.g.
+  // "calc::single_var::integration".
   repeated string topics = 1;
   // Retrievability threshold to count a card as "mastered"; 0 => default 0.9.
   double mastery_threshold = 2;
@@ -60,7 +61,8 @@ message TopicMastery {
   double mastered_lower = 5;
   // Wilson 95% upper bound on the mastered proportion.
   double mastered_upper = 6;
-  // Total graded (rated, scheduling-affecting) reviews across the topic's cards.
+  // Total graded (rated, scheduling-affecting) reviews across the topic's
+  // cards.
   uint32 graded_reviews = 7;
   // True => below min_reviews or no data; the honest UI withholds the score.
   bool abstained = 8;

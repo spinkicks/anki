@@ -12,6 +12,7 @@ One JSON object per exam, keyed by `exam_id`. Rides in the synced collection con
   - `prereqs` (array of string): topic ids that are prerequisites (DAG edges; must be acyclic and reference existing ids).
 
 Invariants (enforced by tests/test_exam_profile.py):
+
 1. All `id` values are unique.
 2. Sum of `ets_weight` == 1.0 (within 1e-3).
 3. Every `prereqs` entry references an existing topic `id`.

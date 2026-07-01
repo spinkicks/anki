@@ -16,17 +16,21 @@ forward all args to `uv`. Override the location by exporting
 `UV_PROJECT_ENVIRONMENT` yourself first.
 
 ## Setup
+
     bash speedrun/uvw.sh sync
     # PowerShell: pwsh speedrun/uvw.ps1 sync
 
 ## Build the seed deck
+
     bash speedrun/uvw.sh run python seed/build_seed_deck.py
     # -> out/gre_math_seed.apkg  (import into Anki desktop or AnkiDroid)
 
 ## Validate
+
     bash speedrun/uvw.sh run pytest tests/ -v
 
 ## Scraper (FLEX)
+
     bash speedrun/uvw.sh run python scraper/scrape_openstax.py --help
     # Emits YAML in the seed/ note shape from open-licensed sources only.
     # Every emitted note carries a Source citation and rule-based topic tags.
@@ -37,5 +41,6 @@ forward all args to `uv`. Override the location by exporting
 > now to avoid unwinding the committed A0–A2 work.
 
 ## License
+
 All content shipped here is open-licensed (OpenStax CC-BY, public domain).
 ETS released forms are NOT redistributed; used only for our own benchmarking.
