@@ -83,9 +83,9 @@ from anki.models import ModelManager, NotetypeDict, NotetypeId
 from anki.notes import Note, NoteId
 from anki.scheduler.dummy import DummyScheduler
 from anki.scheduler.v3 import Scheduler as V3Scheduler
+from anki.speedrun import SpeedrunManager
 from anki.sync import SyncAuth, SyncOutput, SyncStatus
 from anki.tags import TagManager
-from anki.speedrun import SpeedrunManager
 from anki.utils import (
     from_json_bytes,
     ids2str,
