@@ -14,6 +14,7 @@ from anki.collection import OpChangesWithCount
 CoverageResponse = speedrun_pb2.CoverageResponse
 TopicMasteryResponse = speedrun_pb2.TopicMasteryResponse
 ExamProfileResponse = speedrun_pb2.ExamProfileResponse
+PerformanceReadinessResponse = speedrun_pb2.PerformanceReadinessResponse
 
 
 class SpeedrunManager:
@@ -49,6 +50,10 @@ class SpeedrunManager:
         """Store the exam-profile JSON in the synced collection config
         (uses the existing config API — a normal undoable config write)."""
         self.col.set_config(f"speedrun:exam_profile:{exam_id}", profile_json)
+
+    def performance_readiness(self, topics: list[str]) -> PerformanceReadinessResponse:
+        """SCAFFOLDING (non-AI): always-abstaining Performance/Readiness placeholders."""
+        return self.col._backend.get_performance_readiness(topics=topics)
 
     def reorder_new(
         self,

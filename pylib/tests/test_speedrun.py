@@ -91,3 +91,15 @@ def test_reorder_new_is_persisted_and_integrity_ok():
         assert col.db.scalar("pragma integrity_check") == "ok"
     finally:
         col.close()
+
+
+def test_performance_readiness_is_scaffolding_and_abstains():
+    col = getEmptyCol()
+    try:
+        resp = col.speedrun.performance_readiness(["calc::limits"])
+        assert resp.scaffolding is True
+        assert resp.topics[0].performance.abstained is True
+        assert resp.topics[0].readiness.abstained is True
+        assert resp.overall_readiness.abstained is True
+    finally:
+        col.close()

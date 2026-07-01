@@ -23,6 +23,10 @@ service SpeedrunService {
   // Mutating: persisted new-card positions only (never review due-dates).
   rpc ReorderNewByPointsAtStake(ReorderNewRequest)
       returns (anki.collection.OpChangesWithCount);
+  // SCAFFOLDING (non-AI, deterministic): per-topic Performance/Readiness
+  // placeholders with ranges + abstain. Real models are Friday. Always abstains
+  // today (no data => honest). UI wires these as future columns.
+  rpc GetPerformanceReadiness(GetPerformanceReadinessRequest) returns (PerformanceReadinessResponse);
 }
 
 // Required: get_services() asserts one Backend<Name>Service per <Name>Service.
@@ -115,4 +119,29 @@ enum AblationMode {
   ABLATION_MODE_FEATURE_OFF = 1;
   // Plain Anki: no reposition at all (no-op).
   ABLATION_MODE_PLAIN = 2;
+}
+
+message GetPerformanceReadinessRequest {
+  repeated string topics = 1;
+}
+
+message PerformanceReadinessResponse {
+  // Always true today; marks these numbers as not-yet-real scaffolding.
+  bool scaffolding = 1;
+  repeated TopicScaffold topics = 2;
+  // Overall readiness placeholder (abstained today).
+  ScoreScaffold overall_readiness = 3;
+}
+
+message TopicScaffold {
+  string topic = 1;
+  ScoreScaffold performance = 2;
+  ScoreScaffold readiness = 3;
+}
+
+message ScoreScaffold {
+  double point = 1;   // 0.0 while abstaining
+  double lower = 2;   // 0.0
+  double upper = 3;   // 1.0 (full uncertainty)
+  bool abstained = 4; // true today
 }

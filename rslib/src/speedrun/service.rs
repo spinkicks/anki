@@ -210,4 +210,22 @@ impl crate::services::SpeedrunService for Collection {
         self.speedrun_reorder_new(DeckId(input.deck_id), weights, mode)
             .map(Into::into)
     }
+
+    fn get_performance_readiness(
+        &mut self,
+        input: anki_proto::speedrun::GetPerformanceReadinessRequest,
+    ) -> error::Result<anki_proto::speedrun::PerformanceReadinessResponse> {
+        use anki_proto::speedrun::{ScoreScaffold, TopicScaffold};
+        let abstain = || ScoreScaffold { point: 0.0, lower: 0.0, upper: 1.0, abstained: true };
+        let topics = input
+            .topics
+            .into_iter()
+            .map(|t| TopicScaffold { topic: t, performance: Some(abstain()), readiness: Some(abstain()) })
+            .collect();
+        Ok(anki_proto::speedrun::PerformanceReadinessResponse {
+            scaffolding: true,
+            topics,
+            overall_readiness: Some(abstain()),
+        })
+    }
 }
