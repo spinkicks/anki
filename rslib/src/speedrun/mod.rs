@@ -292,9 +292,15 @@ mod test {
         let before = col
             .storage
             .db_scalar::<String>("pragma integrity_check")?;
+        assert_eq!(before, "ok");
         let weights = vec![("calc".to_string(), 0.9), ("linear_algebra".to_string(), 0.1)];
         let out = col.speedrun_reorder_new(DeckId(1), weights, AblationMode::Full)?;
         assert!(out.output >= 1);
+        // integrity holds while the reposition is persisted (before undo)
+        assert_eq!(
+            col.storage.db_scalar::<String>("pragma integrity_check")?,
+            "ok"
+        );
         col.undo()?;
         assert_eq!(
             before,
