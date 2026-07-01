@@ -33,8 +33,8 @@ License: GNU AGPL, version 3 or later; http://www.gnu.org/licenses/agpl.html
         width: 100%;
         flex: none;
         height: 8px;
-        background: var(--frame-bg, #e0e0e0);
-        border-radius: 4px;
+        background: #0a0d11;
+        border: 1px solid var(--line);
     }
     /* Desktop restore: track flex-shrinkable, nums beside it */
     @media (min-width: 768px) {
@@ -50,15 +50,14 @@ License: GNU AGPL, version 3 or later; http://www.gnu.org/licenses/agpl.html
         position: absolute;
         top: 0;
         height: 100%;
-        background: var(--accent, #8aa);
-        border-radius: 4px;
+        background: rgba(230, 234, 239, 0.18);
     }
     .marker {
         position: absolute;
         top: -2px;
         width: 2px;
         height: 12px;
-        background: var(--fg, #333);
+        background: var(--pace);
     }
     .nums {
         font-variant-numeric: tabular-nums;

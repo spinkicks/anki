@@ -121,18 +121,36 @@ License: GNU AGPL, version 3 or later; http://www.gnu.org/licenses/agpl.html
 </div>
 
 <style>
-    /* Mobile-first base: full width, compact padding */
+    /* Design tokens — mirror "The Run" dark palette so Memory matches Home. */
     .memory {
+        --disp: "Space Grotesk", "Segoe UI", system-ui, sans-serif;
+        --mono:
+            "IBM Plex Mono", ui-monospace, "Cascadia Mono", "Segoe UI Mono",
+            "Roboto Mono", monospace;
+
+        --ink: #0b0e12;
+        --panel: #12161c;
+        --line: #232a33;
+        --fg: #e6eaef;
+        --muted: #7c8794;
+        --pace: #e8b23a;
+
+        /* Mobile-first base: full width, compact padding */
         width: 100%;
         padding: 12px;
-        font-family: system-ui, sans-serif;
+        background: var(--ink);
+        color: var(--fg);
+        font-family: var(--disp);
+        -webkit-font-smoothing: antialiased;
     }
-    /* Desktop restore: constrained max-width, original padding */
+    /* Desktop restore: constrained max-width, original padding, side borders */
     @media (min-width: 768px) {
         .memory {
             max-width: 820px;
             margin: 0 auto;
             padding: 16px;
+            border-left: 1px solid var(--line);
+            border-right: 1px solid var(--line);
         }
     }
     .titlebar {
@@ -140,16 +158,70 @@ License: GNU AGPL, version 3 or later; http://www.gnu.org/licenses/agpl.html
         justify-content: space-between;
         align-items: center;
     }
+    .titlebar h1 {
+        font-family: var(--disp);
+        font-size: 18px;
+        font-weight: 700;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+        color: var(--fg);
+    }
+    .titlebar button {
+        font-family: var(--mono);
+        font-size: 11px;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        color: var(--muted);
+        background: none;
+        border: 1px solid var(--line);
+        cursor: pointer;
+        padding: 6px 10px;
+    }
+    .titlebar button:hover,
+    .titlebar button:focus-visible {
+        color: var(--fg);
+        border-color: var(--muted);
+    }
     .explain {
-        color: var(--fg-subtle, #666);
+        color: var(--muted);
+        font-size: 13px;
     }
     .coverage {
         font-weight: 600;
+        color: var(--fg);
+        font-size: 13px;
+        font-family: var(--mono);
     }
     .updated {
         float: right;
         font-weight: 400;
-        color: var(--fg-subtle, #888);
+        color: var(--muted);
+        font-family: var(--mono);
+    }
+    /* "Weakest first" label: 44px touch target on mobile */
+    .sort {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        min-height: 44px;
+        font-family: var(--mono);
+        font-size: 12px;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+        color: var(--muted);
+        cursor: pointer;
+    }
+    .sort:hover {
+        color: var(--fg);
+    }
+    .spinner,
+    .empty {
+        font-family: var(--mono);
+        font-size: 13px;
+        letter-spacing: 0.08em;
+        color: var(--muted);
+        padding: 28px;
+        text-transform: uppercase;
     }
     table {
         width: 100%;
@@ -170,29 +242,33 @@ License: GNU AGPL, version 3 or later; http://www.gnu.org/licenses/agpl.html
     th {
         text-align: left;
         font-size: 0.8em;
-        color: var(--fg-subtle, #888);
-        border-bottom: 1px solid var(--border, #ddd);
+        color: var(--muted);
+        border-bottom: 1px solid var(--line);
         padding: 6px 4px;
+        font-family: var(--mono);
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
     }
     .scaffolding-note {
         font-size: 0.85em;
         font-weight: 400;
-        color: var(--fg-subtle, #aaa);
+        color: var(--muted);
         font-style: italic;
     }
 
     /* Mobile: td padding (base) */
     :global(.memory td) {
         padding: 6px 4px;
-        border-bottom: 1px solid var(--border, #f0f0f0);
+        border-bottom: 1px solid var(--line);
     }
 
     /* Mobile: tbody rows as stacked cards */
     :global(.memory tbody tr:not(.grouphdr)) {
         display: block;
-        border-bottom: 2px solid var(--border, #ddd);
+        border-bottom: 2px solid var(--line);
         margin-bottom: 12px;
         padding: 12px;
+        background: var(--panel);
     }
     :global(.memory tbody tr:not(.grouphdr) td) {
         display: block;
@@ -207,11 +283,12 @@ License: GNU AGPL, version 3 or later; http://www.gnu.org/licenses/agpl.html
             border-bottom: none;
             margin-bottom: 0;
             padding: 0;
+            background: transparent;
         }
         :global(.memory tbody tr:not(.grouphdr) td) {
             display: table-cell;
             padding: 6px 4px;
-            border-bottom: 1px solid var(--border, #f0f0f0);
+            border-bottom: 1px solid var(--line);
         }
     }
 
@@ -219,7 +296,11 @@ License: GNU AGPL, version 3 or later; http://www.gnu.org/licenses/agpl.html
     .grouphdr td {
         font-weight: 700;
         padding-top: 8px;
-        color: var(--fg, #444);
+        color: var(--fg);
+        font-family: var(--mono);
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        font-size: 11px;
     }
     /* Desktop restore: original group header padding */
     @media (min-width: 768px) {

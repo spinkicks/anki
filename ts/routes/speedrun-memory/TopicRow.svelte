@@ -48,7 +48,7 @@ License: GNU AGPL, version 3 or later; http://www.gnu.org/licenses/agpl.html
         opacity: 0.55;
     }
     .weight {
-        color: var(--fg-subtle, #888);
+        color: var(--muted);
         font-size: 0.85em;
     }
     .data {
@@ -56,7 +56,7 @@ License: GNU AGPL, version 3 or later; http://www.gnu.org/licenses/agpl.html
         white-space: nowrap;
     }
     .scaffold {
-        color: var(--fg-subtle, #888);
+        color: var(--muted);
         font-variant-numeric: tabular-nums;
     }
 
@@ -65,7 +65,7 @@ License: GNU AGPL, version 3 or later; http://www.gnu.org/licenses/agpl.html
         content: "TOPIC ";
         font-size: 0.75em;
         font-weight: 600;
-        color: var(--fg-subtle, #888);
+        color: var(--muted);
         text-transform: uppercase;
         letter-spacing: 0.06em;
     }
@@ -73,7 +73,7 @@ License: GNU AGPL, version 3 or later; http://www.gnu.org/licenses/agpl.html
         content: "RECALL: ";
         font-size: 0.75em;
         font-weight: 600;
-        color: var(--fg-subtle, #888);
+        color: var(--muted);
         text-transform: uppercase;
         letter-spacing: 0.06em;
     }
@@ -81,7 +81,7 @@ License: GNU AGPL, version 3 or later; http://www.gnu.org/licenses/agpl.html
         content: "RANGE (95%): ";
         font-size: 0.75em;
         font-weight: 600;
-        color: var(--fg-subtle, #888);
+        color: var(--muted);
         text-transform: uppercase;
         letter-spacing: 0.06em;
     }
@@ -89,7 +89,7 @@ License: GNU AGPL, version 3 or later; http://www.gnu.org/licenses/agpl.html
         content: "DATA: ";
         font-size: 0.75em;
         font-weight: 600;
-        color: var(--fg-subtle, #888);
+        color: var(--muted);
         text-transform: uppercase;
         letter-spacing: 0.06em;
     }
@@ -98,7 +98,7 @@ License: GNU AGPL, version 3 or later; http://www.gnu.org/licenses/agpl.html
         content: "PERFORMANCE: ";
         font-size: 0.75em;
         font-weight: 600;
-        color: var(--fg-subtle, #888);
+        color: var(--muted);
         text-transform: uppercase;
         letter-spacing: 0.06em;
     }
@@ -106,7 +106,7 @@ License: GNU AGPL, version 3 or later; http://www.gnu.org/licenses/agpl.html
         content: "READINESS: ";
         font-size: 0.75em;
         font-weight: 600;
-        color: var(--fg-subtle, #888);
+        color: var(--muted);
         text-transform: uppercase;
         letter-spacing: 0.06em;
     }

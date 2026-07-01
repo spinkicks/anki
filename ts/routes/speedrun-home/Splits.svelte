@@ -94,7 +94,10 @@ License: GNU AGPL, version 3 or later; http://www.gnu.org/licenses/agpl.html
         background: none;
         border: none;
         cursor: pointer;
-        padding: 0;
+        /* Mobile-first: ≥44px touch target */
+        padding: 10px 12px;
+        margin: -10px -12px;
+        min-height: 44px;
     }
     .sort:focus-visible {
         outline: 2px solid var(--fg);
