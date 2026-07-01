@@ -158,4 +158,33 @@ mod test {
         assert_eq!((n, mastered), (0, 0));
         assert_eq!(avg, 0.0);
     }
+
+    #[test]
+    fn topic_mastery_abstains_without_enough_reviews() -> Result<()> {
+        let mut col = Collection::new();
+
+        // Add a note tagged calc::limits but never reviewed => no memory state.
+        let nt = col.get_notetype_by_name("Basic")?.unwrap();
+        let mut note = nt.new_note();
+        col.add_note(&mut note, DeckId(1))?;
+        note.tags = vec!["calc::limits".into()];
+        col.update_note(&mut note)?;
+
+        let resp = col.get_topic_mastery(anki_proto::speedrun::GetTopicMasteryRequest {
+            topics: strs(&["calc::limits", "linear_algebra::eigen"]),
+            mastery_threshold: 0.0, // => default 0.9
+            min_reviews: 0,         // => default 20
+        })?;
+
+        assert_eq!(resp.topics.len(), 2);
+        let limits = &resp.topics[0];
+        assert_eq!(limits.topic, "calc::limits");
+        assert_eq!(limits.cards_with_data, 0); // reviewed 0 times => no FSRS state
+        assert_eq!(limits.graded_reviews, 0);
+        assert!(limits.abstained); // below min_reviews
+        // Full-uncertainty Wilson when no data.
+        assert_eq!((limits.mastered_lower, limits.mastered_upper), (0.0, 1.0));
+        assert!(!resp.backend_version.is_empty());
+        Ok(())
+    }
 }
