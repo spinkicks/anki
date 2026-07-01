@@ -12,6 +12,9 @@ service SpeedrunService {
   // Report how many of the supplied exam-profile topic tags are present in the
   // collection (hierarchical prefix match), plus the engine version string.
   rpc GetCoverage(GetCoverageRequest) returns (CoverageResponse);
+  // Per-topic FSRS memory aggregate: mastered proportion (Wilson 95% range),
+  // average recall, and an abstain flag when graded reviews are too few.
+  rpc GetTopicMastery(GetTopicMasteryRequest) returns (TopicMasteryResponse);
 }
 
 // Required: get_services() asserts one Backend<Name>Service per <Name>Service.
@@ -33,4 +36,38 @@ message CoverageResponse {
   double percent = 3;
   // rslib version (crate::version::version()); proves which engine answered.
   string backend_version = 4;
+}
+
+message GetTopicMasteryRequest {
+  // Topic ids (hierarchical tags) to score, e.g. "calc::single_var::integration".
+  repeated string topics = 1;
+  // Retrievability threshold to count a card as "mastered"; 0 => default 0.9.
+  double mastery_threshold = 2;
+  // Minimum graded reviews before a topic reports a score; 0 => default 20.
+  uint32 min_reviews = 3;
+}
+
+message TopicMastery {
+  // The requested topic id, echoed back.
+  string topic = 1;
+  // Cards under this topic that have an FSRS memory state (usable data points).
+  uint32 cards_with_data = 2;
+  // Cards whose current retrievability >= mastery_threshold.
+  uint32 mastered_count = 3;
+  // Mean current retrievability across cards_with_data (0.0 if none).
+  double avg_recall = 4;
+  // Wilson 95% lower bound on the mastered proportion.
+  double mastered_lower = 5;
+  // Wilson 95% upper bound on the mastered proportion.
+  double mastered_upper = 6;
+  // Total graded (rated, scheduling-affecting) reviews across the topic's cards.
+  uint32 graded_reviews = 7;
+  // True => below min_reviews or no data; the honest UI withholds the score.
+  bool abstained = 8;
+}
+
+message TopicMasteryResponse {
+  repeated TopicMastery topics = 1;
+  // rslib version; proves which engine answered.
+  string backend_version = 2;
 }
