@@ -4,7 +4,6 @@
 use anyhow::Result;
 use ninja_gen::action::BuildAction;
 use ninja_gen::build::FilesHandle;
-use ninja_gen::git::SyncSubmodule;
 use ninja_gen::glob;
 use ninja_gen::inputs;
 use ninja_gen::Build;
@@ -26,7 +25,7 @@ impl BuildAction for BuildCommand {
         build.add_variable("version", &self.version);
         build.add_inputs("aqt_wheel", inputs![":wheels:aqt"]);
         build.add_inputs("anki_wheel", inputs![":wheels:anki"]);
-        build.add_inputs("", inputs![":installer:template", glob!["qt/installer/**"]]);
+        build.add_inputs("", inputs![glob!["qt/installer/**"]]);
         build.add_output_stamp("installer/briefcase.build.stamp");
     }
 }
@@ -50,20 +49,6 @@ impl BuildAction for PackageCommand {
 }
 
 pub fn build_installer(build: &mut Build) -> Result<()> {
-    build.add_action(
-        "installer:template:win",
-        SyncSubmodule {
-            path: "qt/installer/windows-template",
-            offline_build: false,
-        },
-    )?;
-    build.add_action(
-        "installer:template:mac",
-        SyncSubmodule {
-            path: "qt/installer/mac-template",
-            offline_build: false,
-        },
-    )?;
     let version = anki_version();
     build.add_action(
         "installer:build",
