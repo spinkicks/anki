@@ -26,7 +26,8 @@ service SpeedrunService {
   // SCAFFOLDING (non-AI, deterministic): per-topic Performance/Readiness
   // placeholders with ranges + abstain. Real models are Friday. Always abstains
   // today (no data => honest). UI wires these as future columns.
-  rpc GetPerformanceReadiness(GetPerformanceReadinessRequest) returns (PerformanceReadinessResponse);
+  rpc GetPerformanceReadiness(GetPerformanceReadinessRequest)
+      returns (PerformanceReadinessResponse);
 }
 
 // Required: get_services() asserts one Backend<Name>Service per <Name>Service.
@@ -92,7 +93,8 @@ message GetExamProfileRequest {
 }
 
 message ExamProfileResponse {
-  // The profile JSON as stored (topics/labels/ets_weight/prereqs), or "" if unset.
+  // The profile JSON as stored (topics/labels/ets_weight/prereqs), or "" if
+  // unset.
   string profile_json = 1;
   // Echo of the resolved exam id.
   string exam_id = 2;
@@ -140,8 +142,8 @@ message TopicScaffold {
 }
 
 message ScoreScaffold {
-  double point = 1;   // 0.0 while abstaining
-  double lower = 2;   // 0.0
-  double upper = 3;   // 1.0 (full uncertainty)
-  bool abstained = 4; // true today
+  double point = 1;    // 0.0 while abstaining
+  double lower = 2;    // 0.0
+  double upper = 3;    // 1.0 (full uncertainty)
+  bool abstained = 4;  // true today
 }

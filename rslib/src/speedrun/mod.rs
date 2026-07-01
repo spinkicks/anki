@@ -61,8 +61,8 @@ pub(crate) fn wilson_interval(successes: u32, n: u32, z: f64) -> (f64, f64) {
 
 /// Given new-card note-ids each paired with their topic index (or None if the
 /// card matches no weighted topic), and topic indices sorted by descending
-/// points-at-stake, return the note-ids in interleaved order: round-robin across
-/// topics in priority order, so no two adjacent cards share a topic when
+/// points-at-stake, return the note-ids in interleaved order: round-robin
+/// across topics in priority order, so no two adjacent cards share a topic when
 /// multiple topics have remaining cards. Unmatched cards (None) go last, in
 /// input order. Input order within a topic is preserved (stable).
 pub(crate) fn interleave_by_topic(
@@ -288,12 +288,14 @@ mod test {
             note.tags = vec![tag.into()];
             col.update_note(&mut note)?;
         }
-        // integrity-check API is col.storage.db_scalar::<String>("pragma integrity_check")
-        let before = col
-            .storage
-            .db_scalar::<String>("pragma integrity_check")?;
+        // integrity-check API is col.storage.db_scalar::<String>("pragma
+        // integrity_check")
+        let before = col.storage.db_scalar::<String>("pragma integrity_check")?;
         assert_eq!(before, "ok");
-        let weights = vec![("calc".to_string(), 0.9), ("linear_algebra".to_string(), 0.1)];
+        let weights = vec![
+            ("calc".to_string(), 0.9),
+            ("linear_algebra".to_string(), 0.1),
+        ];
         let out = col.speedrun_reorder_new(DeckId(1), weights, AblationMode::Full)?;
         assert!(out.output >= 1);
         // integrity holds while the reposition is persisted (before undo)

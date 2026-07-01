@@ -5,7 +5,11 @@ use crate::collection::Collection;
 
 /// Config key under which an exam profile JSON string is stored, per exam id.
 pub(crate) fn exam_profile_key(exam_id: &str) -> String {
-    let id = if exam_id.is_empty() { "gre_math" } else { exam_id };
+    let id = if exam_id.is_empty() {
+        "gre_math"
+    } else {
+        exam_id
+    };
     format!("speedrun:exam_profile:{id}")
 }
 

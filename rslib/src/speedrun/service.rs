@@ -40,17 +40,13 @@ impl Collection {
                 nids.dedup();
                 nids
             } else {
-                topic_weights.sort_by(|a, b| {
-                    b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal)
-                });
+                topic_weights
+                    .sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
                 let mut note_topic: Vec<(i64, Option<usize>)> = Vec::new();
                 let mut seen = std::collections::HashSet::new();
                 for c in &cards {
                     if seen.insert(c.note_id) {
-                        let note = col
-                            .storage
-                            .get_note(c.note_id)?
-                            .or_not_found(c.note_id)?;
+                        let note = col.storage.get_note(c.note_id)?.or_not_found(c.note_id)?;
                         note_topic.push((
                             c.note_id.0,
                             crate::speedrun::topic_index_for_tags(&note.tags, &topic_weights),
@@ -215,12 +211,22 @@ impl crate::services::SpeedrunService for Collection {
         &mut self,
         input: anki_proto::speedrun::GetPerformanceReadinessRequest,
     ) -> error::Result<anki_proto::speedrun::PerformanceReadinessResponse> {
-        use anki_proto::speedrun::{ScoreScaffold, TopicScaffold};
-        let abstain = || ScoreScaffold { point: 0.0, lower: 0.0, upper: 1.0, abstained: true };
+        use anki_proto::speedrun::ScoreScaffold;
+        use anki_proto::speedrun::TopicScaffold;
+        let abstain = || ScoreScaffold {
+            point: 0.0,
+            lower: 0.0,
+            upper: 1.0,
+            abstained: true,
+        };
         let topics = input
             .topics
             .into_iter()
-            .map(|t| TopicScaffold { topic: t, performance: Some(abstain()), readiness: Some(abstain()) })
+            .map(|t| TopicScaffold {
+                topic: t,
+                performance: Some(abstain()),
+                readiness: Some(abstain()),
+            })
             .collect();
         Ok(anki_proto::speedrun::PerformanceReadinessResponse {
             scaffolding: true,

@@ -5,6 +5,8 @@
 
 from __future__ import annotations
 
+from typing import cast
+
 import anki
 import anki.collection
 from anki import speedrun_pb2
@@ -68,7 +70,9 @@ class SpeedrunManager:
         and integrity_check stay intact."""
         return self.col._backend.reorder_new_by_points_at_stake(
             deck_id=deck_id,
-            mode=mode,
+            # public API takes a plain int (0=FULL/1=FEATURE_OFF/2=PLAIN); the
+            # generated backend types it as the AblationMode enum value.
+            mode=cast("speedrun_pb2.AblationMode.V", mode),
             topic_weights=[
                 speedrun_pb2.TopicWeight(topic=t, weight=w)
                 for t, w in topic_weights.items()
