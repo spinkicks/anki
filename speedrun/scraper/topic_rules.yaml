@@ -1,0 +1,22 @@
+# Copyright: Ankitects Pty Ltd and contributors
+# License: GNU AGPL, version 3 or later; http://www.gnu.org/licenses/agpl.html
+# Ordered rules: first matching keyword set wins. Keywords are lowercased substrings.
+rules:
+  - topic: "calc::limits"
+    any: ["limit", "continuity", "squeeze theorem", "epsilon-delta"]
+  - topic: "calc::single_var::differentiation"
+    any: ["derivative", "differentiate", "chain rule", "product rule"]
+  - topic: "calc::single_var::integration"
+    any: ["integral", "antiderivative", "integration by parts", "fundamental theorem"]
+  - topic: "calc::sequences_series"
+    any: ["series", "sequence", "ratio test", "taylor", "convergence"]
+  - topic: "calc::multivar"
+    any: ["gradient", "partial derivative", "multivariable", "clairaut"]
+  - topic: "linear_algebra::vector_spaces"
+    any: ["vector space", "linearly independent", "basis", "span"]
+  - topic: "linear_algebra::matrices"
+    any: ["determinant", "invertible matrix", "linear system", "row reduction"]
+  - topic: "linear_algebra::eigen"
+    any: ["eigenvalue", "eigenvector", "characteristic polynomial", "diagonaliz"]
+  - topic: "linear_algebra::linear_maps"
+    any: ["linear map", "rank", "nullity", "kernel", "image of"]
