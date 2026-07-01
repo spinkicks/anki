@@ -8,11 +8,17 @@ License: GNU AGPL, version 3 or later; http://www.gnu.org/licenses/agpl.html
     export let weakestTimed: string | null = null;
 
     // The desktop/Android shell wires the real study-session launch; we expose
-    // onStartRun as a prop. The default guards `pycmd` (injected by the Anki
-    // webview, not declared in the SvelteKit TS scope) so it is a no-op outside
-    // a webview (e.g. dev server / tests).
+    // onStartRun as a prop. The default fires BOTH bridges (each guarded): the
+    // desktop Qt webview injects `pycmd`, the Android PageFragment injects
+    // `bridgeCommand` — only the platform's existing one runs, and it's a no-op
+    // outside a webview (dev server / tests).
     export let onStartRun: () => void = () => {
-        (globalThis as { pycmd?: (cmd: string) => void }).pycmd?.("startrun");
+        const g = globalThis as {
+            pycmd?: (cmd: string) => void;
+            bridgeCommand?: (cmd: string) => void;
+        };
+        g.pycmd?.("startrun"); // desktop (Qt AnkiWebView)
+        g.bridgeCommand?.("startrun"); // Android (PageFragment)
     };
 </script>
 
