@@ -128,6 +128,7 @@ class DialogManager:
         "Preferences": [preferences.Preferences, None],
         "sync_log": [mediasync.MediaSyncDialog, None],
         "SpeedrunMemory": [speedrun.SpeedrunMemory, None],
+        "SpeedrunHome": [speedrun.SpeedrunHome, None],
     }
 
     def open(self, name: str, *args: Any, **kwargs: Any) -> Any:

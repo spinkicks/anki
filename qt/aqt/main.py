@@ -554,6 +554,10 @@ class AnkiQt(QMainWindow):
 
         refresh_reviewer_on_day_rollover_change()
         gui_hooks.profile_did_open()
+        # Config-gated auto-open: set speedrunHomeAutoOpenEnabled=False in the
+        # profile to disable (the Tools menu entry always works as a fallback).
+        if self.pm.profile.get("speedrunHomeAutoOpenEnabled", True):
+            aqt.dialogs.open("SpeedrunHome", self)
         self.maybe_auto_sync_on_open_close(_onsuccess)
 
     def unloadProfile(self, onsuccess: Callable) -> None:
@@ -1317,6 +1321,9 @@ title="{}" {}>{}</button>""".format(
     def onSpeedrunMemory(self) -> None:
         aqt.dialogs.open("SpeedrunMemory", self)
 
+    def onSpeedrunHome(self) -> None:
+        aqt.dialogs.open("SpeedrunHome", self)
+
     def on_check_for_updates(self) -> None:
         from packaging.version import Version
 
@@ -1451,6 +1458,7 @@ title="{}" {}>{}</button>""".format(
         qconnect(m.action_check_for_updates.triggered, self.on_check_for_updates)
         qconnect(m.actionPreferences.triggered, self.onPrefs)
         qconnect(m.actionSpeedrunMemory.triggered, self.onSpeedrunMemory)
+        qconnect(m.actionSpeedrunHome.triggered, self.onSpeedrunHome)
 
         # View
         qconnect(

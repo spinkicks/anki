@@ -97,6 +97,7 @@
     <addaction name="actionPreferences"/>
     <addaction name="separator"/>
     <addaction name="actionSpeedrunMemory"/>
+    <addaction name="actionSpeedrunHome"/>
    </widget>
    <widget class="QMenu" name="menuqt_accel_view">
     <property name="title">
@@ -294,6 +295,11 @@
   <action name="actionSpeedrunMemory">
    <property name="text">
     <string>qt_misc_speedrun_memory</string>
+   </property>
+  </action>
+  <action name="actionSpeedrunHome">
+   <property name="text">
+    <string>qt_misc_speedrun_home</string>
    </property>
   </action>
  </widget>
