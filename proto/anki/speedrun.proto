@@ -7,6 +7,8 @@ option java_multiple_files = true;
 
 package anki.speedrun;
 
+import "anki/collection.proto";
+
 // Speedrun read-only analytics. Read-only: no collection mutation, no undo.
 service SpeedrunService {
   // Report how many of the supplied exam-profile topic tags are present in the
@@ -17,6 +19,10 @@ service SpeedrunService {
   rpc GetTopicMastery(GetTopicMasteryRequest) returns (TopicMasteryResponse);
   // Read the exam profile JSON stored in the (synced) collection config.
   rpc GetExamProfile(GetExamProfileRequest) returns (ExamProfileResponse);
+  // Reposition NEW cards by points-at-stake (topic weight) + topic interleave.
+  // Mutating: persisted new-card positions only (never review due-dates).
+  rpc ReorderNewByPointsAtStake(ReorderNewRequest)
+      returns (anki.collection.OpChangesWithCount);
 }
 
 // Required: get_services() asserts one Backend<Name>Service per <Name>Service.
@@ -86,4 +92,27 @@ message ExamProfileResponse {
   string profile_json = 1;
   // Echo of the resolved exam id.
   string exam_id = 2;
+}
+
+message ReorderNewRequest {
+  // Deck to reposition new cards in (children included).
+  int64 deck_id = 1;
+  // Per-topic content weights (from the exam profile). Topics are hierarchical
+  // tags; a card belongs to a topic if a note tag == topic or starts "topic::".
+  repeated TopicWeight topic_weights = 2;
+  AblationMode mode = 3;
+}
+
+message TopicWeight {
+  string topic = 1;
+  double weight = 2;
+}
+
+enum AblationMode {
+  // Points-at-stake ordering + topic interleave (the feature).
+  ABLATION_MODE_FULL = 0;
+  // Feature off: plain note-id reposition (baseline reorder).
+  ABLATION_MODE_FEATURE_OFF = 1;
+  // Plain Anki: no reposition at all (no-op).
+  ABLATION_MODE_PLAIN = 2;
 }

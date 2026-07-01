@@ -70,3 +70,24 @@ def test_exam_profile_round_trips_via_config():
         assert col.db.scalar("pragma integrity_check") == "ok"
     finally:
         col.close()
+
+
+def test_reorder_new_is_persisted_and_integrity_ok():
+    col = getEmptyCol()
+    try:
+        for front, tag in [("c1", "calc"), ("c2", "calc"), ("la1", "linear_algebra")]:
+            note = col.new_note(col.models.by_name("Basic"))
+            note["Front"] = front
+            note.tags = [tag]
+            col.add_note(note, DeckId(1))
+        out = col.speedrun.reorder_new(1, {"calc": 0.9, "linear_algebra": 0.1}, mode=0)
+        assert out.count >= 1
+        # The op is undoable. NOTE: running raw SQL via col.db.* marks the
+        # collection dbproxy-modified and clears the undo queue, so undo() must
+        # come before any integrity_check.
+        assert col.undo_status().undo  # "Reposition" available => op recorded
+        col.undo()
+        # integrity is clean after the op has been made and then undone
+        assert col.db.scalar("pragma integrity_check") == "ok"
+    finally:
+        col.close()

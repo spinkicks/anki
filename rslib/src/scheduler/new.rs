@@ -62,6 +62,11 @@ impl Card {
         last_position.is_none()
     }
 
+    /// Crate-visible wrapper around set_new_position for the Speedrun reorder.
+    pub(crate) fn set_new_position_speedrun(&mut self, position: u32) -> bool {
+        self.set_new_position(position)
+    }
+
     /// If the card is new, change its position, and return true.
     fn set_new_position(&mut self, position: u32) -> bool {
         if self.ctype == CardType::New {

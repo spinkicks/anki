@@ -59,10 +59,63 @@ pub(crate) fn wilson_interval(successes: u32, n: u32, z: f64) -> (f64, f64) {
     ((center - margin).max(0.0), (center + margin).min(1.0))
 }
 
+/// Given new-card note-ids each paired with their topic index (or None if the
+/// card matches no weighted topic), and topic indices sorted by descending
+/// points-at-stake, return the note-ids in interleaved order: round-robin across
+/// topics in priority order, so no two adjacent cards share a topic when
+/// multiple topics have remaining cards. Unmatched cards (None) go last, in
+/// input order. Input order within a topic is preserved (stable).
+pub(crate) fn interleave_by_topic(
+    ordered_topic_indices: &[usize],
+    note_topic: &[(i64, Option<usize>)],
+) -> Vec<i64> {
+    use std::collections::VecDeque;
+    let mut buckets: std::collections::HashMap<usize, VecDeque<i64>> = Default::default();
+    let mut unmatched: Vec<i64> = Vec::new();
+    for (nid, topic) in note_topic {
+        match topic {
+            Some(t) => buckets.entry(*t).or_default().push_back(*nid),
+            None => unmatched.push(*nid),
+        }
+    }
+    let mut out = Vec::with_capacity(note_topic.len());
+    loop {
+        let mut progressed = false;
+        for &t in ordered_topic_indices {
+            if let Some(q) = buckets.get_mut(&t) {
+                if let Some(nid) = q.pop_front() {
+                    out.push(nid);
+                    progressed = true;
+                }
+            }
+        }
+        if !progressed {
+            break;
+        }
+    }
+    out.extend(unmatched);
+    out
+}
+
+/// Match a topic tag set to the index of the highest-priority weighted topic a
+/// card belongs to (prefix rule: tag == topic or starts with "topic::").
+/// `weighted` is (topic, weight) already sorted by descending weight.
+pub(crate) fn topic_index_for_tags(tags: &[String], weighted: &[(String, f64)]) -> Option<usize> {
+    for (i, (topic, _)) in weighted.iter().enumerate() {
+        let prefix = format!("{topic}::");
+        if tags.iter().any(|t| t == topic || t.starts_with(&prefix)) {
+            return Some(i);
+        }
+    }
+    None
+}
+
 #[cfg(test)]
 mod test {
     use super::coverage;
+    use super::interleave_by_topic;
     use super::topic_aggregate;
+    use super::topic_index_for_tags;
     use super::wilson_interval;
     use super::MASTERY_THRESHOLD_DEFAULT;
     use crate::collection::Collection;
@@ -187,6 +240,78 @@ mod test {
                                    // Full-uncertainty Wilson when no data.
         assert_eq!((limits.mastered_lower, limits.mastered_upper), (0.0, 1.0));
         assert!(!resp.backend_version.is_empty());
+        Ok(())
+    }
+
+    #[test]
+    fn interleave_alternates_topics_no_two_adjacent_same() {
+        let nt = vec![
+            (10, Some(0)),
+            (11, Some(0)),
+            (12, Some(0)),
+            (20, Some(1)),
+            (21, Some(1)),
+        ];
+        let out = interleave_by_topic(&[0, 1], &nt);
+        assert_eq!(out, vec![10, 20, 11, 21, 12]);
+    }
+
+    #[test]
+    fn interleave_unmatched_go_last_in_order() {
+        let nt = vec![(1, None), (2, Some(0)), (3, None)];
+        assert_eq!(interleave_by_topic(&[0], &nt), vec![2, 1, 3]);
+    }
+
+    #[test]
+    fn topic_index_uses_prefix_and_priority() {
+        let weighted = vec![("calc".into(), 0.9), ("linear_algebra".into(), 0.1)];
+        assert_eq!(
+            topic_index_for_tags(&["calc::integration".into()], &weighted),
+            Some(0)
+        );
+        assert_eq!(
+            topic_index_for_tags(&["linear_algebra".into()], &weighted),
+            Some(1)
+        );
+        assert_eq!(topic_index_for_tags(&["other".into()], &weighted), None);
+    }
+
+    #[test]
+    fn reorder_new_full_interleaves_and_is_undo_safe() -> Result<()> {
+        use anki_proto::speedrun::AblationMode;
+        let mut col = Collection::new();
+        let nt = col.get_notetype_by_name("Basic")?.unwrap();
+        for (front, tag) in [("c1", "calc"), ("c2", "calc"), ("la1", "linear_algebra")] {
+            let mut note = nt.new_note();
+            note.set_field(0, front)?;
+            col.add_note(&mut note, DeckId(1))?;
+            note.tags = vec![tag.into()];
+            col.update_note(&mut note)?;
+        }
+        // integrity-check API is col.storage.db_scalar::<String>("pragma integrity_check")
+        let before = col
+            .storage
+            .db_scalar::<String>("pragma integrity_check")?;
+        let weights = vec![("calc".to_string(), 0.9), ("linear_algebra".to_string(), 0.1)];
+        let out = col.speedrun_reorder_new(DeckId(1), weights, AblationMode::Full)?;
+        assert!(out.output >= 1);
+        col.undo()?;
+        assert_eq!(
+            before,
+            col.storage.db_scalar::<String>("pragma integrity_check")?
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn reorder_new_plain_is_noop() -> Result<()> {
+        use anki_proto::speedrun::AblationMode;
+        let mut col = Collection::new();
+        let nt = col.get_notetype_by_name("Basic")?.unwrap();
+        let mut note = nt.new_note();
+        col.add_note(&mut note, DeckId(1))?;
+        let out = col.speedrun_reorder_new(DeckId(1), vec![], AblationMode::Plain)?;
+        assert_eq!(out.output, 0);
         Ok(())
     }
 }

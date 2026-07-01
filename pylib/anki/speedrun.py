@@ -8,6 +8,7 @@ from __future__ import annotations
 import anki
 import anki.collection
 from anki import speedrun_pb2
+from anki.collection import OpChangesWithCount
 
 # public export
 CoverageResponse = speedrun_pb2.CoverageResponse
@@ -48,3 +49,23 @@ class SpeedrunManager:
         """Store the exam-profile JSON in the synced collection config
         (uses the existing config API — a normal undoable config write)."""
         self.col.set_config(f"speedrun:exam_profile:{exam_id}", profile_json)
+
+    def reorder_new(
+        self,
+        deck_id: int,
+        topic_weights: dict[str, float],
+        mode: int = 0,  # 0=FULL, 1=FEATURE_OFF, 2=PLAIN
+    ) -> OpChangesWithCount:
+        """Reposition new cards by points-at-stake + interleave (undoable).
+
+        Mutating: writes persisted new-card positions only, never review
+        due-dates or intervals. Goes through transact(Op::SortCards) so undo
+        and integrity_check stay intact."""
+        return self.col._backend.reorder_new_by_points_at_stake(
+            deck_id=deck_id,
+            mode=mode,
+            topic_weights=[
+                speedrun_pb2.TopicWeight(topic=t, weight=w)
+                for t, w in topic_weights.items()
+            ],
+        )
