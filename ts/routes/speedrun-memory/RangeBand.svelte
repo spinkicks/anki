@@ -20,17 +20,31 @@ License: GNU AGPL, version 3 or later; http://www.gnu.org/licenses/agpl.html
 </div>
 
 <style>
+    /* Mobile-first base: wrap so track goes full-width, nums wrap below */
     .range {
         display: flex;
         align-items: center;
         gap: 8px;
+        flex-wrap: wrap;
     }
     .track {
         position: relative;
-        flex: 1;
+        /* Mobile: full width */
+        width: 100%;
+        flex: none;
         height: 8px;
         background: var(--frame-bg, #e0e0e0);
         border-radius: 4px;
+    }
+    /* Desktop restore: track flex-shrinkable, nums beside it */
+    @media (min-width: 768px) {
+        .range {
+            flex-wrap: nowrap;
+        }
+        .track {
+            flex: 1;
+            width: auto;
+        }
     }
     .fill {
         position: absolute;

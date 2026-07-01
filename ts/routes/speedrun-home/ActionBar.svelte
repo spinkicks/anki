@@ -21,7 +21,7 @@ License: GNU AGPL, version 3 or later; http://www.gnu.org/licenses/agpl.html
     {#if weakestTimed}
         <div class="next">
             NEXT SEGMENT · <b>{weakestTimed}</b>
-             — weakest timed topic
+            — weakest timed topic
         </div>
     {:else}
         <div class="next">— begin timing to set a pace</div>
@@ -29,13 +29,24 @@ License: GNU AGPL, version 3 or later; http://www.gnu.org/licenses/agpl.html
 </div>
 
 <style>
+    /* Mobile-first base: stacked column, full-width button */
     .action {
         display: flex;
-        align-items: center;
-        gap: 20px;
-        padding: 22px 28px;
+        align-items: stretch;
+        flex-direction: column;
+        gap: 12px;
+        padding: 16px;
         border-top: 1px solid var(--line);
         margin-top: 8px;
+    }
+    /* Desktop restore: horizontal row */
+    @media (min-width: 768px) {
+        .action {
+            flex-direction: row;
+            align-items: center;
+            gap: 20px;
+            padding: 22px 28px;
+        }
     }
     .run {
         font-family: var(--mono);
@@ -46,19 +57,35 @@ License: GNU AGPL, version 3 or later; http://www.gnu.org/licenses/agpl.html
         background: var(--pace);
         color: var(--ink);
         border: none;
-        padding: 14px 26px;
+        /* Mobile: full width, tall enough for 44px touch target */
+        width: 100%;
+        padding: 16px;
         cursor: pointer;
+    }
+    /* Desktop restore: auto width, original padding */
+    @media (min-width: 768px) {
+        .run {
+            width: auto;
+            padding: 14px 26px;
+        }
     }
     .run:focus-visible {
         outline: 2px solid var(--fg);
         outline-offset: 2px;
     }
+    /* Mobile: centered; desktop restore: default (left) */
     .next {
         font-family: var(--mono);
         font-size: 12px;
         color: var(--muted);
         letter-spacing: 0.06em;
         text-transform: uppercase;
+        text-align: center;
+    }
+    @media (min-width: 768px) {
+        .next {
+            text-align: left;
+        }
     }
     .next b {
         color: var(--fg);

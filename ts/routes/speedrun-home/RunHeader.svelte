@@ -39,18 +39,34 @@ License: GNU AGPL, version 3 or later; http://www.gnu.org/licenses/agpl.html
 </header>
 
 <style>
+    /* Mobile-first base: stacked column */
     header {
         display: flex;
         align-items: flex-start;
         justify-content: space-between;
-        padding: 22px 28px 18px;
+        flex-direction: column;
+        gap: 12px;
+        padding: 16px;
         border-bottom: 1px solid var(--line);
+    }
+    /* Desktop restore: horizontal row, original padding */
+    @media (min-width: 768px) {
+        header {
+            flex-direction: row;
+            gap: 0;
+            padding: 22px 28px 18px;
+        }
     }
     .wordmark {
         font-family: var(--disp);
         font-weight: 700;
-        font-size: 22px;
+        font-size: clamp(18px, 5vw, 22px);
         letter-spacing: 0.14em;
+    }
+    @media (min-width: 768px) {
+        .wordmark {
+            font-size: 22px;
+        }
     }
     .wordmark .k {
         color: var(--pace);
@@ -63,13 +79,19 @@ License: GNU AGPL, version 3 or later; http://www.gnu.org/licenses/agpl.html
         margin-top: 6px;
         text-transform: uppercase;
     }
+    /* Mobile-first: status left-aligned; desktop restore: right-aligned */
     .status {
         font-family: var(--mono);
         font-size: 11px;
         letter-spacing: 0.18em;
         color: var(--muted);
-        text-align: right;
+        text-align: left;
         text-transform: uppercase;
+    }
+    @media (min-width: 768px) {
+        .status {
+            text-align: right;
+        }
     }
     .status .live {
         color: var(--pace);

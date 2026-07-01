@@ -48,17 +48,34 @@ License: GNU AGPL, version 3 or later; http://www.gnu.org/licenses/agpl.html
 </div>
 
 <style>
+    /* Mobile-first base: stacked column layout */
     .stats {
         display: flex;
         border-bottom: 1px solid var(--line);
+        flex-direction: column;
     }
     .stat {
         flex: 1;
-        padding: 16px 28px;
-        border-right: 1px solid var(--line);
+        padding: 12px 16px;
+        border-right: none;
+        border-bottom: 1px solid var(--line);
     }
     .stat:last-child {
-        border-right: none;
+        border-bottom: none;
+    }
+    /* Desktop restore: horizontal row */
+    @media (min-width: 768px) {
+        .stats {
+            flex-direction: row;
+        }
+        .stat {
+            padding: 16px 28px;
+            border-right: 1px solid var(--line);
+            border-bottom: none;
+        }
+        .stat:last-child {
+            border-right: none;
+        }
     }
     .label {
         font-family: var(--mono);
@@ -69,7 +86,7 @@ License: GNU AGPL, version 3 or later; http://www.gnu.org/licenses/agpl.html
     }
     .val {
         font-family: var(--mono);
-        font-size: 26px;
+        font-size: clamp(20px, 6vw, 26px);
         font-weight: 500;
         margin-top: 8px;
         letter-spacing: 0.02em;

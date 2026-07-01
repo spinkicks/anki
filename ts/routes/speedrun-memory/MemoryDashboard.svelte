@@ -121,11 +121,19 @@ License: GNU AGPL, version 3 or later; http://www.gnu.org/licenses/agpl.html
 </div>
 
 <style>
+    /* Mobile-first base: full width, compact padding */
     .memory {
-        max-width: 820px;
-        margin: 0 auto;
-        padding: 16px;
+        width: 100%;
+        padding: 12px;
         font-family: system-ui, sans-serif;
+    }
+    /* Desktop restore: constrained max-width, original padding */
+    @media (min-width: 768px) {
+        .memory {
+            max-width: 820px;
+            margin: 0 auto;
+            padding: 16px;
+        }
     }
     .titlebar {
         display: flex;
@@ -147,6 +155,18 @@ License: GNU AGPL, version 3 or later; http://www.gnu.org/licenses/agpl.html
         width: 100%;
         border-collapse: collapse;
     }
+
+    /* Mobile: hide thead */
+    thead {
+        display: none;
+    }
+    /* Desktop restore: show thead */
+    @media (min-width: 768px) {
+        thead {
+            display: table-header-group;
+        }
+    }
+
     th {
         text-align: left;
         font-size: 0.8em;
@@ -160,13 +180,51 @@ License: GNU AGPL, version 3 or later; http://www.gnu.org/licenses/agpl.html
         color: var(--fg-subtle, #aaa);
         font-style: italic;
     }
+
+    /* Mobile: td padding (base) */
     :global(.memory td) {
         padding: 6px 4px;
         border-bottom: 1px solid var(--border, #f0f0f0);
     }
+
+    /* Mobile: tbody rows as stacked cards */
+    :global(.memory tbody tr:not(.grouphdr)) {
+        display: block;
+        border-bottom: 2px solid var(--border, #ddd);
+        margin-bottom: 12px;
+        padding: 12px;
+    }
+    :global(.memory tbody tr:not(.grouphdr) td) {
+        display: block;
+        border-bottom: none;
+        padding: 3px 0;
+    }
+
+    /* Desktop restore: normal table-row / table-cell */
+    @media (min-width: 768px) {
+        :global(.memory tbody tr:not(.grouphdr)) {
+            display: table-row;
+            border-bottom: none;
+            margin-bottom: 0;
+            padding: 0;
+        }
+        :global(.memory tbody tr:not(.grouphdr) td) {
+            display: table-cell;
+            padding: 6px 4px;
+            border-bottom: 1px solid var(--border, #f0f0f0);
+        }
+    }
+
+    /* Mobile: compact group header */
     .grouphdr td {
         font-weight: 700;
-        padding-top: 14px;
+        padding-top: 8px;
         color: var(--fg, #444);
+    }
+    /* Desktop restore: original group header padding */
+    @media (min-width: 768px) {
+        .grouphdr td {
+            padding-top: 14px;
+        }
     }
 </style>

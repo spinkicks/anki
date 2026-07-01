@@ -64,7 +64,18 @@ License: GNU AGPL, version 3 or later; http://www.gnu.org/licenses/agpl.html
         display: flex;
         align-items: baseline;
         justify-content: space-between;
-        padding: 20px 28px 10px;
+        /* Mobile-first base: wrap on narrow screens */
+        flex-wrap: wrap;
+        gap: 8px;
+        padding: 16px;
+    }
+    /* Desktop restore: original padding */
+    @media (min-width: 768px) {
+        .splits-hd {
+            flex-wrap: nowrap;
+            gap: 0;
+            padding: 20px 28px 10px;
+        }
     }
     .splits-hd h2 {
         font-family: var(--mono);

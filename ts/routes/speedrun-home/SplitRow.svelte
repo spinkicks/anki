@@ -30,8 +30,14 @@ with an inline 95% confidence error-bracket band (bracket = interval, amber tick
         <td class="c-recall">—</td>
         <td class="c-band" colspan="2">
             <span class="locked">
-                NOT TIMED — review <b>{row.unlockN} more</b>
-                 to unlock a split
+                <span class="abstain-full">
+                    NOT TIMED — review <b>{row.unlockN} more</b>
+                     to unlock a split
+                </span>
+                <span class="abstain-compact">
+                    🔒 <b>{row.unlockN} more</b>
+                     to unlock
+                </span>
             </span>
         </td>
         <td class="c-flag">▮</td>
@@ -60,38 +66,76 @@ with an inline 95% confidence error-bracket band (bracket = interval, amber tick
 {/if}
 
 <style>
+    /* Mobile-first base: stacked card layout */
+    tr.row {
+        display: block;
+        min-height: 44px;
+    }
     tr.row td {
-        padding: 7px 28px;
+        display: block;
+        width: 100%;
+        padding: 6px 16px;
         font-family: var(--mono);
         font-size: 13px;
         border: none;
-        vertical-align: middle;
     }
-    /* Note: the mockup's `tr.row + tr.row td { padding-top: 3px }` rule is
-       omitted — each SplitRow is its own scoped component, so adjacent-sibling
-       row selectors never match here; keeping it would be a dead selector. */
+
+    /* Mobile: topic on its own full-width line */
     .c-topic {
         color: var(--fg);
-        width: 200px;
         letter-spacing: 0.02em;
     }
+
+    /* Mobile: recall + range side-by-side (~48% each) */
     .c-recall {
         color: var(--fg);
-        width: 60px;
-        text-align: right;
-    }
-    .c-band {
-        width: 300px;
+        display: inline-block;
+        width: 48%;
+        text-align: left;
     }
     .c-range {
         color: var(--muted);
-        width: 92px;
+        display: inline-block;
+        width: 48%;
         text-align: right;
     }
+
+    /* Mobile: flag centered on its own line */
     .c-flag {
-        width: 40px;
         text-align: center;
         color: var(--pace);
+    }
+
+    /* Desktop restore: table row layout with pixel widths */
+    @media (min-width: 768px) {
+        tr.row {
+            display: table-row;
+            min-height: unset;
+        }
+        tr.row td {
+            display: table-cell;
+            width: auto;
+            padding: 7px 28px;
+        }
+        .c-topic {
+            width: 200px;
+        }
+        .c-recall {
+            display: table-cell;
+            width: 60px;
+            text-align: right;
+        }
+        .c-band {
+            width: 300px;
+        }
+        .c-range {
+            display: table-cell;
+            width: 92px;
+            text-align: right;
+        }
+        .c-flag {
+            width: 40px;
+        }
     }
 
     /* abstained rows dim */
@@ -110,6 +154,22 @@ with an inline 95% confidence error-bracket band (bracket = interval, amber tick
     .locked b {
         color: var(--pace);
         font-weight: 500;
+    }
+
+    /* M0.8: compact abstain copy — narrow screens show compact, wide show full */
+    .abstain-compact {
+        display: inline;
+    }
+    .abstain-full {
+        display: none;
+    }
+    @media (min-width: 480px) {
+        .abstain-compact {
+            display: none;
+        }
+        .abstain-full {
+            display: inline;
+        }
     }
 
     /* the signature: inline error-bracket band */

@@ -82,15 +82,22 @@ calmly. Reuses the frozen SpeedrunService RPCs via @speedrun/data.
         --muted: #7c8794;
         --pace: #e8b23a;
 
-        max-width: 960px;
-        margin: 0 auto;
+        /* Mobile-first base: full width, no side borders */
+        width: 100%;
         min-height: 100vh;
         background: var(--ink);
         color: var(--fg);
         font-family: var(--disp);
-        border-left: 1px solid var(--line);
-        border-right: 1px solid var(--line);
         -webkit-font-smoothing: antialiased;
+    }
+    /* Desktop restore: constrained width + side borders */
+    @media (min-width: 768px) {
+        .app {
+            max-width: 960px;
+            margin: 0 auto;
+            border-left: 1px solid var(--line);
+            border-right: 1px solid var(--line);
+        }
     }
     .app :global(*) {
         box-sizing: border-box;
