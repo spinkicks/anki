@@ -20,6 +20,7 @@ const config = {
         alias: {
             "@tslib": join(tsFolder, "lib/tslib"),
             "@generated": join(tsFolder, "../out/ts/lib/generated"),
+            "@speedrun": join(tsFolder, "lib/speedrun"),
         },
         files: {
             lib: join(tsFolder, "lib"),
