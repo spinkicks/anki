@@ -10,13 +10,16 @@ License: GNU AGPL, version 3 or later; http://www.gnu.org/licenses/agpl.html
         loadCoverage,
         loadProfile,
         loadRows,
+        loadScaffoldMap,
         type Row,
+        type TopicScaffoldRow,
     } from "./data";
     import TopicRow from "./TopicRow.svelte";
 
     let profile: ExamProfile | null = null;
     let rows: Row[] = [];
     let coverage = { covered: 0, total: 0, percent: 0 };
+    let scaffold: Map<string, TopicScaffoldRow> = new Map();
     let loading = true;
     let error = "";
     let weakestFirst = false;
@@ -31,9 +34,10 @@ License: GNU AGPL, version 3 or later; http://www.gnu.org/licenses/agpl.html
                 error = "No cards found for this exam profile — import the seed deck.";
                 return;
             }
-            [rows, coverage] = await Promise.all([
+            [rows, coverage, scaffold] = await Promise.all([
                 loadRows(profile),
                 loadCoverage(profile),
+                loadScaffoldMap(profile),
             ]);
             updated = new Date().toLocaleTimeString();
         } catch (e) {
@@ -80,7 +84,7 @@ License: GNU AGPL, version 3 or later; http://www.gnu.org/licenses/agpl.html
         </p>
         <label class="sort">
             <input type="checkbox" bind:checked={weakestFirst} />
-             Weakest first
+            Weakest first
         </label>
     </header>
 
@@ -96,13 +100,19 @@ License: GNU AGPL, version 3 or later; http://www.gnu.org/licenses/agpl.html
                     <th>RECALL</th>
                     <th>RANGE (95%)</th>
                     <th>DATA</th>
+                    <th>
+                        PERFORMANCE <span class="scaffolding-note">(scaffolding)</span>
+                    </th>
+                    <th>
+                        READINESS <span class="scaffolding-note">(scaffolding)</span>
+                    </th>
                 </tr>
             </thead>
             {#each groups as g}
                 <tbody>
-                    <tr class="grouphdr"><td colspan="4">{g.header.label}</td></tr>
+                    <tr class="grouphdr"><td colspan="6">{g.header.label}</td></tr>
                     {#each g.leaves as row (row.id)}
-                        <TopicRow {row} />
+                        <TopicRow {row} scaffold={scaffold.get(row.id)} />
                     {/each}
                 </tbody>
             {/each}
@@ -143,6 +153,12 @@ License: GNU AGPL, version 3 or later; http://www.gnu.org/licenses/agpl.html
         color: var(--fg-subtle, #888);
         border-bottom: 1px solid var(--border, #ddd);
         padding: 6px 4px;
+    }
+    .scaffolding-note {
+        font-size: 0.85em;
+        font-weight: 400;
+        color: var(--fg-subtle, #aaa);
+        font-style: italic;
     }
     :global(.memory td) {
         padding: 6px 4px;

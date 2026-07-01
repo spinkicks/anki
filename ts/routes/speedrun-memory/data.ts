@@ -83,3 +83,25 @@ export async function loadScaffold(profile: ExamProfile) {
     const leafIds = profile.topics.filter((t) => t.ets_weight > 0).map((t) => t.id);
     return await getPerformanceReadiness({ topics: leafIds });
 }
+
+export interface ScaffoldCell {
+    abstained: boolean;
+}
+export interface TopicScaffoldRow {
+    performance: ScaffoldCell;
+    readiness: ScaffoldCell;
+}
+
+export async function loadScaffoldMap(
+    profile: ExamProfile,
+): Promise<Map<string, TopicScaffoldRow>> {
+    const resp = await loadScaffold(profile);
+    const map = new Map<string, TopicScaffoldRow>();
+    for (const t of resp.topics) {
+        map.set(t.topic, {
+            performance: { abstained: t.performance?.abstained ?? true },
+            readiness: { abstained: t.readiness?.abstained ?? true },
+        });
+    }
+    return map;
+}
