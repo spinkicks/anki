@@ -527,6 +527,13 @@ class AnkiQt(QMainWindow):
                 onsuccess()
             if not self.safeMode:
                 self.maybe_check_for_addon_updates(self.setup_auto_update)
+                # Config-gated auto-open of Speedrun Home — fired here, AFTER any
+                # startup sync completes, so the sync-progress dialog can't stack
+                # under it; skipped in safe/recovery mode (inside this guard).
+                # Reversible via speedrunHomeAutoOpenEnabled; Tools entry is the
+                # fallback.
+                if self.pm.profile.get("speedrunHomeAutoOpenEnabled", True):
+                    aqt.dialogs.open("SpeedrunHome", self)
 
         last_day_cutoff = self.col.sched.day_cutoff
 
@@ -554,10 +561,6 @@ class AnkiQt(QMainWindow):
 
         refresh_reviewer_on_day_rollover_change()
         gui_hooks.profile_did_open()
-        # Config-gated auto-open: set speedrunHomeAutoOpenEnabled=False in the
-        # profile to disable (the Tools menu entry always works as a fallback).
-        if self.pm.profile.get("speedrunHomeAutoOpenEnabled", True):
-            aqt.dialogs.open("SpeedrunHome", self)
         self.maybe_auto_sync_on_open_close(_onsuccess)
 
     def unloadProfile(self, onsuccess: Callable) -> None:
