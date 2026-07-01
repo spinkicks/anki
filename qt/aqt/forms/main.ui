@@ -95,6 +95,8 @@
     <addaction name="actionNoteTypes"/>
     <addaction name="action_check_for_updates"/>
     <addaction name="actionPreferences"/>
+    <addaction name="separator"/>
+    <addaction name="actionSpeedrunMemory"/>
    </widget>
    <widget class="QMenu" name="menuqt_accel_view">
     <property name="title">
@@ -287,6 +289,11 @@
   <action name="action_check_for_updates">
    <property name="text">
     <string>addons_check_for_updates</string>
+   </property>
+  </action>
+  <action name="actionSpeedrunMemory">
+   <property name="text">
+    <string>qt_misc_speedrun_memory</string>
    </property>
   </action>
  </widget>

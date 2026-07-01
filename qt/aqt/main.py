@@ -1314,6 +1314,9 @@ title="{}" {}>{}</button>""".format(
     def onPrefs(self) -> None:
         aqt.dialogs.open("Preferences", self)
 
+    def onSpeedrunMemory(self) -> None:
+        aqt.dialogs.open("SpeedrunMemory", self)
+
     def on_check_for_updates(self) -> None:
         from packaging.version import Version
 
@@ -1447,6 +1450,7 @@ title="{}" {}>{}</button>""".format(
         qconnect(m.actionNoteTypes.triggered, self.onNoteTypes)
         qconnect(m.action_check_for_updates.triggered, self.on_check_for_updates)
         qconnect(m.actionPreferences.triggered, self.onPrefs)
+        qconnect(m.actionSpeedrunMemory.triggered, self.onSpeedrunMemory)
 
         # View
         qconnect(

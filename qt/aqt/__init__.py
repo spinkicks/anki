@@ -112,6 +112,7 @@ import aqt.forms
 
 from aqt import addcards, addons, browser, editcurrent, filtered_deck  # isort:skip
 from aqt import stats, about, preferences, mediasync  # isort:skip
+from aqt import speedrun  # isort:skip
 
 
 class DialogManager:
@@ -126,6 +127,7 @@ class DialogManager:
         "About": [about.show, None],
         "Preferences": [preferences.Preferences, None],
         "sync_log": [mediasync.MediaSyncDialog, None],
+        "SpeedrunMemory": [speedrun.SpeedrunMemory, None],
     }
 
     def open(self, name: str, *args: Any, **kwargs: Any) -> Any:

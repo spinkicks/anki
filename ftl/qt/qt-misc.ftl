@@ -45,6 +45,7 @@ qt-misc-segoe-ui = "Segoe UI"
 qt-misc-shift-key-was-held-down-skipping = Shift key was held down. Skipping automatic syncing and add-on loading.
 qt-misc-shortcut-key-left-arrow = Shortcut key: Left arrow
 qt-misc-shortcut-key-right-arrow-or-enter = Shortcut key: Right arrow or Enter
+qt-misc-speedrun-memory = Speedrun: Memory
 qt-misc-stats = Stats
 qt-misc-study-deck = Study Deck...
 qt-misc-sync = Sync
