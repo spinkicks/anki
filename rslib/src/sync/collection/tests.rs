@@ -486,8 +486,8 @@ async fn meta_redirect_is_handled() -> Result<()> {
 /// is append-only — each review has a distinct ms-timestamp `id`, so distinct
 /// reviews from both clients coexist rather than one side clobbering the other.
 ///
-/// We seed both collections from a single upload/download (so both reference the
-/// same card id), add 10 pending revlog entries (usn=-1) on each side with
+/// We seed both collections from a single upload/download (so both reference
+/// the same card id), add 10 pending revlog entries (usn=-1) on each side with
 /// disjoint ids, and sync up-then-reconcile. All 20 entries should land on both
 /// sides, with no DB corruption.
 #[tokio::test]
