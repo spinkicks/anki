@@ -2,6 +2,15 @@
     "exam_id": "gre_math",
     "name": "GRE Mathematics Subject Test (Wed subset: Calculus + Linear Algebra)",
     "version": 1,
+    "scoring": {
+        "performance": { "min_problem_attempts": 5 },
+        "readiness": {
+            "equating": { "min_scaled": 200, "max_scaled": 990 },
+            "conformal": { "base_margin": 40.0, "widen_k": 8.0 },
+            "give_up": { "min_mini_mocks": 2, "min_coverage": 0.6, "max_interval_width": 200.0 },
+            "mini_mock_min_items": 5
+        }
+    },
     "topics": [
         { "id": "calc", "name": "Calculus", "ets_weight": 0.0, "prereqs": [] },
         { "id": "calc::limits", "name": "Limits & continuity", "ets_weight": 0.10, "prereqs": ["calc"] },

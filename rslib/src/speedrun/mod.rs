@@ -174,6 +174,160 @@ pub(crate) fn interleave_reviews_by_weakness(
     interleave_by_topic(&ordered_topics, &note_topic)
 }
 
+// ---- Scoring config (parsed from the exam-profile JSON; all fields defaulted so
+// a profile with no "scoring" block still yields sane, documented defaults). ----
+
+#[derive(Debug, Clone, serde::Deserialize)]
+#[serde(default)]
+pub(crate) struct ScoringConfig {
+    pub performance: PerfScoreConfig,
+    pub readiness: ReadinessScoreConfig,
+}
+impl Default for ScoringConfig {
+    fn default() -> Self {
+        Self {
+            performance: PerfScoreConfig::default(),
+            readiness: ReadinessScoreConfig::default(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, serde::Deserialize)]
+#[serde(default)]
+pub(crate) struct PerfScoreConfig {
+    /// Minimum graded problem attempts on a topic before Performance reports a
+    /// number (else abstain — memory != application, so we never fake it).
+    pub min_problem_attempts: u32,
+}
+impl Default for PerfScoreConfig {
+    fn default() -> Self {
+        Self {
+            min_problem_attempts: 5,
+        }
+    }
+}
+
+#[derive(Debug, Clone, serde::Deserialize)]
+#[serde(default)]
+pub(crate) struct ReadinessScoreConfig {
+    pub equating: EquatingConfig,
+    pub conformal: ConformalConfig,
+    pub give_up: GiveUpConfig,
+    /// A "timed mini-mock" = a calendar day with >= this many problem attempts.
+    pub mini_mock_min_items: u32,
+}
+impl Default for ReadinessScoreConfig {
+    fn default() -> Self {
+        Self {
+            equating: EquatingConfig::default(),
+            conformal: ConformalConfig::default(),
+            give_up: GiveUpConfig::default(),
+            mini_mock_min_items: 5,
+        }
+    }
+}
+
+#[derive(Debug, Clone, serde::Deserialize)]
+#[serde(default)]
+pub(crate) struct EquatingConfig {
+    pub min_scaled: f64,
+    pub max_scaled: f64,
+}
+impl Default for EquatingConfig {
+    fn default() -> Self {
+        Self {
+            min_scaled: 200.0,
+            max_scaled: 990.0,
+        }
+    }
+}
+
+#[derive(Debug, Clone, serde::Deserialize)]
+#[serde(default)]
+pub(crate) struct ConformalConfig {
+    pub base_margin: f64,
+    pub widen_k: f64,
+}
+impl Default for ConformalConfig {
+    fn default() -> Self {
+        Self {
+            base_margin: 40.0,
+            widen_k: 8.0,
+        }
+    }
+}
+
+#[derive(Debug, Clone, serde::Deserialize)]
+#[serde(default)]
+pub(crate) struct GiveUpConfig {
+    pub min_mini_mocks: u32,
+    pub min_coverage: f64,
+    pub max_interval_width: f64,
+}
+impl Default for GiveUpConfig {
+    fn default() -> Self {
+        Self {
+            min_mini_mocks: 2,
+            min_coverage: 0.6,
+            max_interval_width: 200.0,
+        }
+    }
+}
+
+/// Parse `topic id -> ets_weight` from an exam-profile JSON string (missing => {}).
+pub(crate) fn exam_topic_weights(profile_json: &str) -> std::collections::HashMap<String, f64> {
+    #[derive(serde::Deserialize)]
+    struct T {
+        id: String,
+        #[serde(default)]
+        ets_weight: f64,
+    }
+    #[derive(serde::Deserialize)]
+    struct P {
+        #[serde(default)]
+        topics: Vec<T>,
+    }
+    serde_json::from_str::<P>(profile_json)
+        .map(|p| p.topics.into_iter().map(|t| (t.id, t.ets_weight)).collect())
+        .unwrap_or_default()
+}
+
+/// Parse the `scoring` block from an exam-profile JSON string; missing/invalid =>
+/// documented defaults (never fails).
+pub(crate) fn scoring_config_from_profile(profile_json: &str) -> ScoringConfig {
+    #[derive(serde::Deserialize)]
+    struct Wrapper {
+        #[serde(default)]
+        scoring: ScoringConfig,
+    }
+    serde_json::from_str::<Wrapper>(profile_json)
+        .map(|w| w.scoring)
+        .unwrap_or_default()
+}
+
+/// Weighted ability in [0,1] = Σ(weight × perf) / Σweight over topics that have a
+/// Performance number. Returns None when no weighted topic has data (=> abstain).
+/// This is the flat "calculus-weighted topic sum" (NOT a min()-gate).
+pub(crate) fn weighted_ability(topic_perf: &[(f64, f64)]) -> Option<f64> {
+    let total_w: f64 = topic_perf.iter().map(|(w, _)| w).sum();
+    if total_w <= 0.0 {
+        return None;
+    }
+    Some(topic_perf.iter().map(|(w, p)| w * p).sum::<f64>() / total_w)
+}
+
+/// Linear equating of ability [0,1] -> scaled [min, max] (GRE 200-990 by default).
+pub(crate) fn equate_linear(ability: f64, min_scaled: f64, max_scaled: f64) -> f64 {
+    min_scaled + ability.clamp(0.0, 1.0) * (max_scaled - min_scaled)
+}
+
+/// Conformal-style half-margin (scaled points) that widens as attempts shrink:
+/// `base * (1 + k/(n+1))`. n=0 => base*(1+k) (very uncertain); large n => ~base.
+/// Deterministic — no calibration set needed for the flat model.
+pub(crate) fn conformal_margin(base: f64, k: f64, n: u32) -> f64 {
+    base * (1.0 + k / (n as f64 + 1.0))
+}
+
 #[cfg(test)]
 mod test {
     use super::coverage;
@@ -523,6 +677,185 @@ mod test {
             .map(|(c, _)| col.storage.get_card(*c).unwrap().unwrap().due)
             .collect();
         assert_eq!(due_before, due_after, "interleave must not mutate card state");
+        Ok(())
+    }
+
+    #[test]
+    fn weighted_ability_is_weighted_mean() {
+        assert_eq!(super::weighted_ability(&[(0.9, 1.0), (0.1, 0.0)]), Some(0.9));
+        assert_eq!(super::weighted_ability(&[]), None);
+    }
+
+    #[test]
+    fn equate_linear_maps_unit_to_scale() {
+        assert!((super::equate_linear(0.0, 200.0, 990.0) - 200.0).abs() < 1e-9);
+        assert!((super::equate_linear(1.0, 200.0, 990.0) - 990.0).abs() < 1e-9);
+        assert!((super::equate_linear(0.5, 200.0, 990.0) - 595.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn conformal_margin_widens_when_sparse() {
+        let sparse = super::conformal_margin(40.0, 8.0, 0);
+        let dense = super::conformal_margin(40.0, 8.0, 100);
+        assert!(sparse > dense, "sparse {sparse} should exceed dense {dense}");
+        assert!((dense - 40.0 * (1.0 + 8.0 / 101.0)).abs() < 1e-9);
+    }
+
+    #[test]
+    fn scoring_config_parses_from_default_profile() {
+        let col = Collection::new();
+        let json = col.speedrun_exam_profile_json("gre_math");
+        let cfg = super::scoring_config_from_profile(&json);
+        assert_eq!(cfg.performance.min_problem_attempts, 5);
+        assert_eq!(cfg.readiness.give_up.min_mini_mocks, 2);
+        assert!((cfg.readiness.equating.max_scaled - 990.0).abs() < 1e-9);
+    }
+
+    // ---- Scoring integration (synthetic problem revlog) ----
+
+    // Add `count` graded problem attempts to `cid` starting at epoch-day `day`
+    // (revlog ids = day*86_400_000 + i). `correct` of them use button 4, rest 1.
+    fn add_problem_attempts(
+        col: &mut Collection,
+        cid: crate::prelude::CardId,
+        day: i64,
+        count: u32,
+        correct: u32,
+    ) {
+        use crate::revlog::RevlogEntry;
+        use crate::revlog::RevlogId;
+        for i in 0..count {
+            let button = if i < correct { 4 } else { 1 };
+            col.storage
+                .add_revlog_entry(
+                    &RevlogEntry {
+                        id: RevlogId(day * 86_400_000 + i as i64),
+                        cid,
+                        button_chosen: button,
+                        ..Default::default()
+                    },
+                    false,
+                )
+                .unwrap();
+        }
+    }
+
+    fn add_problem_card(col: &mut Collection, topic: &str, front: &str) -> crate::prelude::CardId {
+        let nt = col.get_notetype_by_name("Basic").unwrap().unwrap();
+        let mut note = nt.new_note();
+        note.set_field(0, front).unwrap();
+        col.add_note(&mut note, DeckId(1)).unwrap();
+        note.tags = vec![topic.into(), "Speedrun::Problem".into()];
+        col.update_note(&mut note).unwrap();
+        col.storage.all_cards_of_note(note.id).unwrap().pop().unwrap().id
+    }
+
+    #[test]
+    fn performance_scores_and_gap_delta_with_problems() -> Result<()> {
+        use crate::card::FsrsMemoryState;
+        let topic = "calc::single_var::integration";
+        let mut col = Collection::new();
+        // A declarative card with a memory state => a recall signal for the gap.
+        let nt = col.get_notetype_by_name("Basic")?.unwrap();
+        let mut d = nt.new_note();
+        d.set_field(0, "decl")?;
+        col.add_note(&mut d, DeckId(1))?;
+        d.tags = vec![topic.into()];
+        col.update_note(&mut d)?;
+        let dcid = col.storage.all_cards_of_note(d.id)?.pop().unwrap().id;
+        let mut dc = col.storage.get_card(dcid)?.unwrap();
+        dc.memory_state = Some(FsrsMemoryState {
+            stability: 1000.0,
+            difficulty: 5.0,
+        });
+        col.storage.update_card(&dc)?;
+        // A problem card with 10 graded attempts, 9 correct => accuracy 0.9.
+        let pcid = add_problem_card(&mut col, topic, "prob");
+        add_problem_attempts(&mut col, pcid, 5, 10, 9);
+
+        let resp = col.get_performance_readiness(
+            anki_proto::speedrun::GetPerformanceReadinessRequest {
+                topics: vec![topic.into()],
+            },
+        )?;
+        assert!(!resp.scaffolding, "a real Performance number => not scaffolding");
+        let t = &resp.topics[0];
+        let perf = t.performance.as_ref().unwrap();
+        assert!(!perf.abstained, "10 attempts >= min 5 => scored");
+        assert!((perf.point - 0.9).abs() < 1e-9, "accuracy={}", perf.point);
+        assert!(perf.lower < perf.point && perf.point < perf.upper); // Wilson band
+        assert_eq!(perf.scale, anki_proto::speedrun::ScoreScale::Unit as i32);
+        // gap_delta = declarative recall - problem accuracy; computed (both present).
+        assert!(t.gap_delta.abs() <= 1.0, "gap_delta={}", t.gap_delta);
+        Ok(())
+    }
+
+    #[test]
+    fn performance_abstains_below_attempt_threshold() -> Result<()> {
+        let topic = "calc::single_var::integration";
+        let mut col = Collection::new();
+        let pcid = add_problem_card(&mut col, topic, "prob");
+        add_problem_attempts(&mut col, pcid, 5, 3, 3); // only 3 attempts (< 5)
+        let resp = col.get_performance_readiness(
+            anki_proto::speedrun::GetPerformanceReadinessRequest {
+                topics: vec![topic.into()],
+            },
+        )?;
+        assert!(resp.topics[0].performance.as_ref().unwrap().abstained);
+        assert!(resp.scaffolding, "nothing scored => still scaffolding");
+        Ok(())
+    }
+
+    #[test]
+    fn readiness_abstains_without_two_mini_mocks() -> Result<()> {
+        let topic = "calc::single_var::integration";
+        let mut col = Collection::new();
+        let pcid = add_problem_card(&mut col, topic, "prob");
+        add_problem_attempts(&mut col, pcid, 5, 10, 9); // 10 attempts, ALL on day 5
+        let resp = col.get_performance_readiness(
+            anki_proto::speedrun::GetPerformanceReadinessRequest {
+                topics: vec![topic.into()],
+            },
+        )?;
+        let overall = resp.overall_readiness.as_ref().unwrap();
+        assert!(overall.abstained, "1 mini-mock (< 2) => readiness locked");
+        assert!(!resp.abstain_reason.is_empty());
+        assert!(
+            resp.unlock_requirements.iter().any(|u| u.kind == "mini_mocks"),
+            "unlock must name the missing mini-mocks"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn readiness_unlocks_with_two_mocks_and_coverage() -> Result<()> {
+        let topic = "calc::single_var::integration";
+        let mut col = Collection::new();
+        let pcid = add_problem_card(&mut col, topic, "prob");
+        // 2 mini-mocks: 5 attempts on day 5 + 5 on day 6 (each >= mini_mock_min 5).
+        add_problem_attempts(&mut col, pcid, 5, 5, 5);
+        add_problem_attempts(&mut col, pcid, 6, 5, 4);
+        let resp = col.get_performance_readiness(
+            anki_proto::speedrun::GetPerformanceReadinessRequest {
+                topics: vec![topic.into()],
+            },
+        )?;
+        let overall = resp.overall_readiness.as_ref().unwrap();
+        assert!(
+            !overall.abstained,
+            "2 mocks + full coverage + tight interval => unlocked; reason={}",
+            resp.abstain_reason
+        );
+        assert_eq!(
+            overall.scale,
+            anki_proto::speedrun::ScoreScale::Gre200990 as i32
+        );
+        assert!(
+            (200.0..=990.0).contains(&overall.point),
+            "scaled score in range: {}",
+            overall.point
+        );
+        assert!(overall.lower <= overall.point && overall.point <= overall.upper);
         Ok(())
     }
 

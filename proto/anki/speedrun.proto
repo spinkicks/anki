@@ -128,22 +128,62 @@ message GetPerformanceReadinessRequest {
 }
 
 message PerformanceReadinessResponse {
-  // Always true today; marks these numbers as not-yet-real scaffolding.
+  // False once ANY topic emits a real (non-abstained) score. True while every
+  // score abstains (no data yet). Kept for back-compat with the scaffolding UI.
   bool scaffolding = 1;
   repeated TopicScaffold topics = 2;
-  // Overall readiness placeholder (abstained today).
+  // Overall exam readiness (200-990 scale; abstains until the give-up rule met).
   ScoreScaffold overall_readiness = 3;
+  // APPEND-ONLY. Human-readable reason the overall score abstains ("" if scored).
+  string abstain_reason = 4;
+  // APPEND-ONLY. Concrete actions to unlock the overall readiness score.
+  repeated UnlockRequirement unlock_requirements = 5;
 }
 
 message TopicScaffold {
   string topic = 1;
   ScoreScaffold performance = 2;
   ScoreScaffold readiness = 3;
+  // APPEND-ONLY. §7d gap meter: declarative recall - problem accuracy for this
+  // topic (0.0 when either side abstains). Positive => knows facts but can't yet
+  // apply them on problems.
+  double gap_delta = 4;
 }
 
 message ScoreScaffold {
-  double point = 1;    // 0.0 while abstaining
-  double lower = 2;    // 0.0
-  double upper = 3;    // 1.0 (full uncertainty)
-  bool abstained = 4;  // true today
+  double point = 1;    // score point estimate (units per `scale`)
+  double lower = 2;    // interval lower bound (same units)
+  double upper = 3;    // interval upper bound (same units)
+  bool abstained = 4;  // true => not enough data; UI withholds the number
+  // APPEND-ONLY additions (all default 0 / UNIT for legacy readers):
+  // Percentile rank 0-100 (0.0 while abstaining).
+  double percentile = 5;
+  // How to interpret point/lower/upper. Performance = UNIT (0..1); Readiness =
+  // GRE_200_990. Without this a 200-990 score would be misread as a 0..1 band.
+  ScoreScale scale = 6;
+  // TimestampSecs of the newest input used to compute this score (0 if none).
+  int64 last_updated = 7;
+}
+
+// APPEND-ONLY. Unit system for a ScoreScaffold's point/lower/upper.
+enum ScoreScale {
+  // 0.0-1.0 probability/proportion (Performance, recall).
+  SCORE_SCALE_UNIT = 0;
+  // GRE scaled score 200-990 (Readiness).
+  SCORE_SCALE_GRE_200_990 = 1;
+}
+
+// APPEND-ONLY. One actionable requirement to unlock an abstaining score, e.g.
+// "answer 12 more calculus items" or "complete 1 more timed mini-mock".
+message UnlockRequirement {
+  // Machine kind: "mini_mocks" | "coverage" | "interval_width" | "topic_items".
+  string kind = 1;
+  // Current value the user has (e.g. mini-mocks done, coverage fraction).
+  double have = 2;
+  // Threshold needed to unlock (from the exam-profile give-up config).
+  double need = 3;
+  // Human-readable instruction for the UI.
+  string human = 4;
+  // Optional topic id when kind == "topic_items" ("" otherwise).
+  string topic = 5;
 }

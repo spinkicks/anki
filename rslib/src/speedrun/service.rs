@@ -214,26 +214,265 @@ impl crate::services::SpeedrunService for Collection {
         input: anki_proto::speedrun::GetPerformanceReadinessRequest,
     ) -> error::Result<anki_proto::speedrun::PerformanceReadinessResponse> {
         use anki_proto::speedrun::ScoreScaffold;
+        use anki_proto::speedrun::ScoreScale;
         use anki_proto::speedrun::TopicScaffold;
-        let abstain = || ScoreScaffold {
+        use anki_proto::speedrun::UnlockRequirement;
+
+        use crate::speedrun::conformal_margin;
+        use crate::speedrun::equate_linear;
+        use crate::speedrun::exam_topic_weights;
+        use crate::speedrun::scoring_config_from_profile;
+        use crate::speedrun::weighted_ability;
+        use crate::speedrun::wilson_interval;
+        use crate::speedrun::WILSON_Z_95;
+
+        let profile_json = self.speedrun_exam_profile_json("gre_math");
+        let cfg = scoring_config_from_profile(&profile_json);
+        let weights = exam_topic_weights(&profile_json);
+
+        let timing = self.timing_today()?;
+        let fsrs = FSRS::new(None).unwrap();
+
+        let abstain_unit = || ScoreScaffold {
             point: 0.0,
             lower: 0.0,
             upper: 1.0,
             abstained: true,
+            percentile: 0.0,
+            scale: ScoreScale::Unit as i32,
+            last_updated: 0,
         };
-        let topics = input
-            .topics
-            .into_iter()
-            .map(|t| TopicScaffold {
-                topic: t,
-                performance: Some(abstain()),
-                readiness: Some(abstain()),
-            })
-            .collect();
+        let abstain_scaled = || ScoreScaffold {
+            point: 0.0,
+            lower: 0.0,
+            upper: 0.0,
+            abstained: true,
+            percentile: 0.0,
+            scale: ScoreScale::Gre200990 as i32,
+            last_updated: 0,
+        };
+
+        let total = input.topics.len() as u32;
+        let mut topics_out = Vec::with_capacity(input.topics.len());
+        // (weight, performance point) for topics with a real Performance number.
+        let mut ability_terms: Vec<(f64, f64)> = Vec::new();
+        let mut total_attempts = 0u32;
+        let mut covered = 0u32;
+        let mut any_real = false;
+        let mut overall_newest_secs = 0i64;
+
+        for topic in &input.topics {
+            let (recall_n, recall) = self.topic_recall(topic, &timing, &fsrs)?;
+            let (attempts, correct, newest_ms) = self.topic_problem_stats(topic)?;
+            total_attempts += attempts;
+            overall_newest_secs = overall_newest_secs.max(newest_ms / 1000);
+            if recall_n > 0 || attempts > 0 {
+                covered += 1;
+            }
+            let weight = weights.get(topic).copied().unwrap_or(0.0);
+
+            // Performance = demonstrated problem accuracy (Wilson), only once
+            // enough problems attempted; otherwise abstain (memory != application).
+            let performance = if attempts >= cfg.performance.min_problem_attempts {
+                let acc = correct as f64 / attempts as f64;
+                let (lo, hi) = wilson_interval(correct, attempts, WILSON_Z_95);
+                any_real = true;
+                if weight > 0.0 {
+                    ability_terms.push((weight, acc));
+                }
+                ScoreScaffold {
+                    point: acc,
+                    lower: lo,
+                    upper: hi,
+                    abstained: false,
+                    percentile: 0.0,
+                    scale: ScoreScale::Unit as i32,
+                    last_updated: newest_ms / 1000,
+                }
+            } else {
+                abstain_unit()
+            };
+
+            // §7d gap meter: declarative recall - problem accuracy (both present).
+            let gap_delta = if recall_n > 0 && !performance.abstained {
+                recall - performance.point
+            } else {
+                0.0
+            };
+
+            topics_out.push(TopicScaffold {
+                topic: topic.clone(),
+                performance: Some(performance),
+                // Readiness is an exam-level score -> carried in overall_readiness.
+                readiness: Some(abstain_scaled()),
+                gap_delta,
+            });
+        }
+
+        // ---- Overall readiness: flat IRT ability -> 200-990 + conformal + give-up ----
+        let mini_mocks = self.mini_mock_count(cfg.readiness.mini_mock_min_items)?;
+        let coverage_frac = if total == 0 {
+            0.0
+        } else {
+            covered as f64 / total as f64
+        };
+        let ability = weighted_ability(&ability_terms);
+        let g = &cfg.readiness.give_up;
+
+        let mut unlock: Vec<UnlockRequirement> = Vec::new();
+        if mini_mocks < g.min_mini_mocks {
+            unlock.push(UnlockRequirement {
+                kind: "mini_mocks".into(),
+                have: mini_mocks as f64,
+                need: g.min_mini_mocks as f64,
+                human: format!(
+                    "Complete {} more timed mini-mock(s)",
+                    g.min_mini_mocks - mini_mocks
+                ),
+                topic: String::new(),
+            });
+        }
+        if coverage_frac < g.min_coverage {
+            unlock.push(UnlockRequirement {
+                kind: "coverage".into(),
+                have: coverage_frac,
+                need: g.min_coverage,
+                human: format!(
+                    "Cover more topics ({:.0}% now, need {:.0}%)",
+                    coverage_frac * 100.0,
+                    g.min_coverage * 100.0
+                ),
+                topic: String::new(),
+            });
+        }
+
+        let (overall_readiness, abstain_reason) = if let Some(a) = ability {
+            let e = &cfg.readiness.equating;
+            let scaled = equate_linear(a, e.min_scaled, e.max_scaled);
+            let margin = conformal_margin(
+                cfg.readiness.conformal.base_margin,
+                cfg.readiness.conformal.widen_k,
+                total_attempts,
+            );
+            let width = 2.0 * margin;
+            if width >= g.max_interval_width {
+                unlock.push(UnlockRequirement {
+                    kind: "interval_width".into(),
+                    have: width,
+                    need: g.max_interval_width,
+                    human: "Answer more problems to narrow the estimate".into(),
+                    topic: String::new(),
+                });
+            }
+            // Give-up gate (all config-driven; NOT a min()-over-prereqs).
+            let unlocked = mini_mocks >= g.min_mini_mocks
+                && coverage_frac >= g.min_coverage
+                && width < g.max_interval_width;
+            if unlocked {
+                let lo = (scaled - margin).clamp(e.min_scaled, e.max_scaled);
+                let hi = (scaled + margin).clamp(e.min_scaled, e.max_scaled);
+                (
+                    ScoreScaffold {
+                        point: scaled,
+                        lower: lo,
+                        upper: hi,
+                        abstained: false,
+                        // Placeholder percentile (linear on ability) until a real
+                        // ETS norm table is supplied via the exam-profile config.
+                        percentile: a.clamp(0.0, 1.0) * 100.0,
+                        scale: ScoreScale::Gre200990 as i32,
+                        last_updated: overall_newest_secs,
+                    },
+                    String::new(),
+                )
+            } else {
+                (
+                    abstain_scaled(),
+                    "Readiness locked until the give-up rule is met".to_string(),
+                )
+            }
+        } else {
+            (abstain_scaled(), "No timed problem data yet".to_string())
+        };
+
         Ok(anki_proto::speedrun::PerformanceReadinessResponse {
-            scaffolding: true,
-            topics,
-            overall_readiness: Some(abstain()),
+            scaffolding: !any_real,
+            topics: topics_out,
+            overall_readiness: Some(overall_readiness),
+            abstain_reason,
+            unlock_requirements: unlock,
         })
+    }
+}
+
+impl Collection {
+    /// Average FSRS retrievability of DECLARATIVE (non-problem) cards under a
+    /// topic. Returns (cards_with_data, avg_recall). Batched: one search + one
+    /// card scan. Read-only.
+    fn topic_recall(
+        &mut self,
+        topic: &str,
+        timing: &crate::scheduler::timing::SchedTimingToday,
+        fsrs: &FSRS,
+    ) -> error::Result<(u32, f64)> {
+        let search = format!("(\"tag:{topic}\" OR \"tag:{topic}::*\") -\"tag:Speedrun::Problem\"");
+        let guard = self.search_cards_into_table(search.as_str(), SortMode::NoOrder)?;
+        let mut rs: Vec<f64> = Vec::new();
+        guard.col.storage.for_each_card_in_search(|card| {
+            if let Some(state) = card.memory_state {
+                let elapsed = card.seconds_since_last_review(timing).unwrap_or_default();
+                let decay = card.decay.unwrap_or(FSRS5_DEFAULT_DECAY);
+                rs.push(fsrs.current_retrievability_seconds(state.into(), elapsed, decay) as f64);
+            }
+            Ok(())
+        })?;
+        drop(guard);
+        let n = rs.len() as u32;
+        let avg = if n == 0 {
+            0.0
+        } else {
+            rs.iter().sum::<f64>() / n as f64
+        };
+        Ok((n, avg))
+    }
+
+    /// Problem-card stats under a topic: (graded_attempts, correct, newest_ms).
+    /// "correct" = button_chosen >= 3 (Good/Easy). Batched: one search + one
+    /// revlog scan. Read-only.
+    fn topic_problem_stats(&mut self, topic: &str) -> error::Result<(u32, u32, i64)> {
+        let search = format!("(\"tag:{topic}\" OR \"tag:{topic}::*\") \"tag:Speedrun::Problem\"");
+        let guard = self.search_cards_into_table(search.as_str(), SortMode::NoOrder)?;
+        let revlog = guard.col.storage.get_revlog_entries_for_searched_cards()?;
+        drop(guard);
+        let mut attempts = 0u32;
+        let mut correct = 0u32;
+        let mut newest = 0i64;
+        for entry in &revlog {
+            if entry.has_rating_and_affects_scheduling() {
+                attempts += 1;
+                if entry.button_chosen >= 3 {
+                    correct += 1;
+                }
+                newest = newest.max(entry.id.0);
+            }
+        }
+        Ok((attempts, correct, newest))
+    }
+
+    /// Count "timed mini-mocks": distinct epoch-days with >= `min_items` graded
+    /// problem attempts (a proxy until Phase 3's real session mechanic). Read-only.
+    fn mini_mock_count(&mut self, min_items: u32) -> error::Result<u32> {
+        use std::collections::HashMap;
+        let guard =
+            self.search_cards_into_table("\"tag:Speedrun::Problem\"", SortMode::NoOrder)?;
+        let revlog = guard.col.storage.get_revlog_entries_for_searched_cards()?;
+        drop(guard);
+        let mut per_day: HashMap<i64, u32> = HashMap::new();
+        for entry in &revlog {
+            if entry.has_rating_and_affects_scheduling() {
+                *per_day.entry(entry.id.0 / 86_400_000).or_default() += 1;
+            }
+        }
+        Ok(per_day.values().filter(|c| **c >= min_items).count() as u32)
     }
 }
