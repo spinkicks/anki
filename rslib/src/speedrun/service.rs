@@ -476,20 +476,22 @@ impl Collection {
         Ok((attempts, correct, newest))
     }
 
-    /// Count "timed mini-mocks": distinct epoch-days with >= `min_items` graded
-    /// problem attempts (a proxy until Phase 3's real session mechanic).
-    /// Read-only.
+    /// Count "timed mini-mocks" as SESSIONS, not calendar days. A session is a
+    /// run of graded problem-attempt revlog entries with no gap >= `SESSION_GAP_MS`
+    /// between consecutive attempts; a session counts toward the total once it has
+    /// >= `min_items` attempts. This fixes the day-proxy bug where two separate
+    /// mini-mocks on the SAME day counted as one, under-counting the readiness
+    /// give-up gate (`min_mini_mocks`). Read-only.
     fn mini_mock_count(&mut self, min_items: u32) -> error::Result<u32> {
-        use std::collections::HashMap;
         let guard = self.search_cards_into_table("\"tag:Speedrun::Problem\"", SortMode::NoOrder)?;
         let revlog = guard.col.storage.get_revlog_entries_for_searched_cards()?;
         drop(guard);
-        let mut per_day: HashMap<i64, u32> = HashMap::new();
-        for entry in &revlog {
-            if entry.has_rating_and_affects_scheduling() {
-                *per_day.entry(entry.id.0 / 86_400_000).or_default() += 1;
-            }
-        }
-        Ok(per_day.values().filter(|c| **c >= min_items).count() as u32)
+        // Collect the graded problem-attempt timestamps (epoch-ms revlog ids).
+        let mut times: Vec<i64> = revlog
+            .iter()
+            .filter(|e| e.has_rating_and_affects_scheduling())
+            .map(|e| e.id.0)
+            .collect();
+        Ok(crate::speedrun::count_mock_sessions(&mut times, min_items))
     }
 }

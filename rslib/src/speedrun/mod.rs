@@ -22,6 +22,48 @@ pub(crate) fn coverage(all_tags: &[String], required: &[String]) -> (u32, u32) {
     (covered, total)
 }
 
+/// Inactivity gap (ms) that separates two mini-mock SESSIONS. Graded
+/// problem-attempt revlog entries closer together than this belong to the same
+/// sitting; a gap >= this starts a new session. 30 minutes: a timed mini-mock is
+/// a short focused burst, so half an hour of no graded attempts reliably marks a
+/// new sitting while still tolerating think-time on a single hard problem.
+///
+/// Chosen as a documented module constant rather than a config field: threading
+/// a new field through `ReadinessScoreConfig` + the exam-profile JSON schema +
+/// defaults would be heavy for a value with no user-facing knob. Promote to
+/// `ReadinessScoreConfig` if a future exam profile needs to tune it.
+pub(crate) const SESSION_GAP_MS: i64 = 30 * 60 * 1000;
+
+/// Count mini-mock SESSIONS from graded problem-attempt timestamps (epoch-ms).
+/// A session is a maximal run of timestamps with no consecutive gap
+/// >= `SESSION_GAP_MS`; it counts toward the total only if it holds
+/// >= `min_items` attempts. Sorts `times` in place. Read-only w.r.t. the DB.
+///
+/// This replaces the old epoch-day bucketing, which collapsed two separate
+/// same-day mini-mocks into one (under-counting the readiness give-up gate).
+pub(crate) fn count_mock_sessions(times: &mut [i64], min_items: u32) -> u32 {
+    if times.is_empty() {
+        return 0;
+    }
+    times.sort_unstable();
+    let mut sessions = 0u32;
+    let mut run_len = 1u32;
+    for i in 1..times.len() {
+        if times[i] - times[i - 1] >= SESSION_GAP_MS {
+            if run_len >= min_items {
+                sessions += 1;
+            }
+            run_len = 1;
+        } else {
+            run_len += 1;
+        }
+    }
+    if run_len >= min_items {
+        sessions += 1;
+    }
+    sessions
+}
+
 /// Default retrievability at/above which a card counts as "mastered".
 pub(crate) const MASTERY_THRESHOLD_DEFAULT: f64 = 0.9;
 /// Default minimum graded reviews before a topic reports a (non-abstained)
@@ -854,6 +896,61 @@ mod test {
         assert!((cfg.readiness.equating.max_scaled - 990.0).abs() < 1e-9);
     }
 
+    // ---- Session grouping (FIX C: mini_mock_count is session-scoped) ----
+
+    #[test]
+    fn count_mock_sessions_same_day_two_sessions() {
+        // Two bursts on the SAME epoch-day, separated by more than SESSION_GAP_MS
+        // (the old day-bucketing collapsed these into 1). Each burst has 5 tightly
+        // spaced attempts (1 ms apart) -> 2 sessions of 5 >= min 5.
+        let day = 5i64 * 86_400_000;
+        let mut times: Vec<i64> = Vec::new();
+        // Burst A occupies day..=day+4.
+        times.extend(day..day + 5);
+        // Burst B starts a full SESSION_GAP_MS after burst A's LAST attempt
+        // (day+4), so the A->B gap is > SESSION_GAP_MS and a new session starts.
+        let b = day + 4 + super::SESSION_GAP_MS + 1;
+        times.extend(b..b + 5);
+        assert_eq!(super::count_mock_sessions(&mut times, 5), 2);
+    }
+
+    #[test]
+    fn count_mock_sessions_tight_cluster_one_session() {
+        // 10 attempts all within SESSION_GAP_MS (1 ms apart) -> a single session.
+        let mut times: Vec<i64> = (1_000..1_010).collect();
+        assert_eq!(super::count_mock_sessions(&mut times, 5), 1);
+    }
+
+    #[test]
+    fn count_mock_sessions_below_min_items_not_counted() {
+        // A session with fewer than min_items attempts does NOT count. Burst A has
+        // 5 (counts), burst B has only 3 (does not) -> total 1.
+        let mut times: Vec<i64> = Vec::new();
+        times.extend(0i64..5); // 5 attempts
+        let b = super::SESSION_GAP_MS + 100;
+        times.extend(b..b + 3); // 3 attempts, separate session
+        assert_eq!(super::count_mock_sessions(&mut times, 5), 1);
+    }
+
+    #[test]
+    fn count_mock_sessions_boundary_and_unsorted() {
+        // A gap of EXACTLY SESSION_GAP_MS starts a new session (>= is the rule),
+        // and unsorted input is handled (sorted in place).
+        let mut times = vec![super::SESSION_GAP_MS, 0, 1, super::SESSION_GAP_MS + 1];
+        // sorted: [0, 1, GAP, GAP+1] -> gap between 1 and GAP is (GAP-1) < GAP so
+        // same session; so this is one run of 4. Use min 2 -> 1 session.
+        assert_eq!(super::count_mock_sessions(&mut times, 2), 1);
+        // Now force a boundary: [0, GAP] -> gap == GAP -> two singleton sessions.
+        let mut edge = vec![super::SESSION_GAP_MS, 0];
+        assert_eq!(super::count_mock_sessions(&mut edge, 1), 2);
+    }
+
+    #[test]
+    fn count_mock_sessions_empty_is_zero() {
+        let mut times: Vec<i64> = Vec::new();
+        assert_eq!(super::count_mock_sessions(&mut times, 1), 0);
+    }
+
     // ---- Scoring integration (synthetic problem revlog) ----
 
     // Add `count` graded problem attempts to `cid` starting at epoch-day `day`
@@ -875,6 +972,32 @@ mod test {
                         id: RevlogId(day * 86_400_000 + i as i64),
                         cid,
                         button_chosen: button,
+                        ..Default::default()
+                    },
+                    false,
+                )
+                .unwrap();
+        }
+    }
+
+    // Add `count` graded problem attempts to `cid` at explicit epoch-ms
+    // `base_ms + i` (i.e. 1 ms apart -> a single tight session). Lets a test
+    // place two bursts on the SAME day but separated by a chosen gap.
+    fn add_problem_attempts_at_ms(
+        col: &mut Collection,
+        cid: crate::prelude::CardId,
+        base_ms: i64,
+        count: u32,
+    ) {
+        use crate::revlog::RevlogEntry;
+        use crate::revlog::RevlogId;
+        for i in 0..count {
+            col.storage
+                .add_revlog_entry(
+                    &RevlogEntry {
+                        id: RevlogId(base_ms + i as i64),
+                        cid,
+                        button_chosen: 4,
                         ..Default::default()
                     },
                     false,
@@ -1009,6 +1132,70 @@ mod test {
         assert_eq!(
             overall.percentile, 0.0,
             "readiness percentile abstains (no ETS norm table)"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn readiness_counts_two_same_day_sessions_as_two_mocks() -> Result<()> {
+        // Regression for FIX C: two SEPARATE mini-mocks on the SAME calendar day
+        // (bursts > SESSION_GAP_MS apart) must count as 2 sessions, so the give-up
+        // gate's `min_mini_mocks` (2) is satisfied and readiness UNLOCKS. Under the
+        // old epoch-day bucketing both bursts collapsed to 1 day => stayed locked.
+        let topic = "calc::single_var::integration";
+        let mut col = Collection::new();
+        let pcid = add_problem_card(&mut col, topic, "prob");
+        // Both bursts on day 5, separated by > 30 min; 5 attempts each (>= min 5).
+        // Burst A occupies day5..=day5+4; burst B starts a full SESSION_GAP_MS
+        // after A's last attempt so the A->B gap exceeds SESSION_GAP_MS.
+        let day5 = 5i64 * 86_400_000;
+        add_problem_attempts_at_ms(&mut col, pcid, day5, 5);
+        add_problem_attempts_at_ms(&mut col, pcid, day5 + 4 + super::SESSION_GAP_MS + 1, 5);
+
+        let resp =
+            col.get_performance_readiness(anki_proto::speedrun::GetPerformanceReadinessRequest {
+                topics: vec![topic.into()],
+            })?;
+        // No mini_mocks unlock requirement should remain (2 sessions satisfy it).
+        assert!(
+            !resp
+                .unlock_requirements
+                .iter()
+                .any(|u| u.kind == "mini_mocks"),
+            "two same-day sessions must satisfy min_mini_mocks; unlocks={:?}",
+            resp.unlock_requirements
+                .iter()
+                .map(|u| &u.kind)
+                .collect::<Vec<_>>()
+        );
+        let overall = resp.overall_readiness.as_ref().unwrap();
+        assert!(
+            !overall.abstained,
+            "2 same-day sessions + full coverage + tight interval => unlocked; reason={}",
+            resp.abstain_reason
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn readiness_same_session_burst_counts_as_one_mock() -> Result<()> {
+        // Complement: a SINGLE tight burst of 10 same-day attempts is one session,
+        // so readiness stays LOCKED on min_mini_mocks (only 1 mock). This pins the
+        // "within SESSION_GAP_MS => one session" half of the fix end-to-end.
+        let topic = "calc::single_var::integration";
+        let mut col = Collection::new();
+        let pcid = add_problem_card(&mut col, topic, "prob");
+        add_problem_attempts_at_ms(&mut col, pcid, 5i64 * 86_400_000, 10);
+
+        let resp =
+            col.get_performance_readiness(anki_proto::speedrun::GetPerformanceReadinessRequest {
+                topics: vec![topic.into()],
+            })?;
+        assert!(
+            resp.unlock_requirements
+                .iter()
+                .any(|u| u.kind == "mini_mocks"),
+            "one tight burst is a single session (< 2 mocks) => still locked"
         );
         Ok(())
     }
