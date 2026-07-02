@@ -287,9 +287,91 @@ impl Collection {
 
         queues.gather_cards(self)?;
 
+        // Speedrun read-time review interleave (gated by synced config; no-op
+        // unless Full). Reorders the already-gathered/limited/buried review set
+        // in place — no card mutation, no transact. Must run before build().
+        self.speedrun_interleave_reviews(&mut queues.review)?;
+
         let queues = queues.build(self.learn_ahead_secs() as i64);
 
         Ok(queues)
+    }
+
+    /// Weakness × ETS-weight interleave of the gathered REVIEW queue, gated by the
+    /// synced `speedrun:review_interleave` config. Only `AblationMode::Full`
+    /// reorders; FeatureOff/Plain (or absent config) leave Anki's SQL review order
+    /// untouched. Read-only: permutes `review` in place — never writes cards, never
+    /// transacts, never changes scheduling state (due/interval/reps).
+    pub(crate) fn speedrun_interleave_reviews(&mut self, review: &mut Vec<DueCard>) -> Result<()> {
+        use fsrs::FSRS;
+        use fsrs::FSRS5_DEFAULT_DECAY;
+
+        use crate::speedrun::interleave_reviews_by_weakness;
+        use crate::speedrun::topic_index_for_tags;
+        use crate::speedrun::ReviewInterleaveConfig;
+        use crate::speedrun::REVIEW_INTERLEAVE_CONFIG_KEY;
+
+        let Some(cfg) =
+            self.get_config_optional::<ReviewInterleaveConfig, _>(REVIEW_INTERLEAVE_CONFIG_KEY)
+        else {
+            return Ok(());
+        };
+        if cfg.mode != anki_proto::speedrun::AblationMode::Full as i32 || review.len() < 2 {
+            return Ok(());
+        }
+
+        // Sort weights descending so topic_index_for_tags picks the
+        // highest-priority matching topic (deterministic tie by topic name).
+        let mut weights = cfg.weights;
+        weights.sort_by(|a, b| {
+            b.1.partial_cmp(&a.1)
+                .unwrap_or(std::cmp::Ordering::Equal)
+                .then(a.0.cmp(&b.0))
+        });
+
+        let timing = self.timing_today()?;
+        let fsrs = FSRS::new(None).unwrap();
+
+        // Per review card: (card_id, topic_index, current retrievability). Cards
+        // without an FSRS memory state (e.g. FSRS off) are treated as r=1.0 (not
+        // weak) so they sort last. Bounded by the day's review limit (self.review
+        // is already the capped/buried set).
+        let mut cards: Vec<(i64, Option<usize>, f64)> = Vec::with_capacity(review.len());
+        for dc in review.iter() {
+            let card = self.storage.get_card(dc.id)?.or_not_found(dc.id)?;
+            let tags = self
+                .storage
+                .get_note(card.note_id)?
+                .map(|n| n.tags)
+                .unwrap_or_default();
+            let topic = topic_index_for_tags(&tags, &weights);
+            let r = if let Some(state) = card.memory_state {
+                let elapsed = card.seconds_since_last_review(&timing).unwrap_or_default();
+                let decay = card.decay.unwrap_or(FSRS5_DEFAULT_DECAY);
+                fsrs.current_retrievability_seconds(state.into(), elapsed, decay) as f64
+            } else {
+                1.0
+            };
+            cards.push((dc.id.0, topic, r));
+        }
+
+        let ordered = interleave_reviews_by_weakness(&cards, &weights);
+        let mut by_id: HashMap<i64, DueCard> = review.iter().map(|dc| (dc.id.0, *dc)).collect();
+        let mut new_review = Vec::with_capacity(review.len());
+        for cid in ordered {
+            if let Some(dc) = by_id.remove(&cid) {
+                new_review.push(dc);
+            }
+        }
+        // Safety net: append anything not covered (shouldn't happen), preserving order.
+        for dc in review.iter() {
+            if by_id.remove(&dc.id.0).is_some() {
+                new_review.push(*dc);
+            }
+        }
+        debug_assert_eq!(new_review.len(), review.len());
+        *review = new_review;
+        Ok(())
     }
 }
 

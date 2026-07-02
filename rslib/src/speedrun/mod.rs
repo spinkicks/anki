@@ -110,10 +110,75 @@ pub(crate) fn topic_index_for_tags(tags: &[String], weighted: &[(String, f64)]) 
     None
 }
 
+/// Synced-config key holding the read-time review-interleave feature state.
+/// Absent => feature OFF (Anki's default SQL review order, untouched Anki).
+pub(crate) const REVIEW_INTERLEAVE_CONFIG_KEY: &str = "speedrun:review_interleave";
+
+/// Feature config read from the synced collection config. `mode` mirrors
+/// `AblationMode` (0=Full, 1=FeatureOff, 2=Plain); `weights` are (topic,
+/// ets_weight) pairs from the exam profile. Only Full reorders reviews.
+#[derive(Debug, Clone, serde::Deserialize)]
+pub(crate) struct ReviewInterleaveConfig {
+    pub mode: i32,
+    #[serde(default)]
+    pub weights: Vec<(String, f64)>,
+}
+
+/// Pure read-time ordering for the due REVIEW queue. Given review cards as
+/// `(card_id, topic_index, retrievability)` and exam-profile `weights`
+/// (topic, weight) SORTED BY DESCENDING WEIGHT, return the card_ids ordered by
+/// points-at-stake and interleaved by topic (no two adjacent same-topic when
+/// avoidable).
+///
+/// `points_at_stake = (1 - retrievability) * topic_weight` (weakness × weight).
+/// Topics run in descending aggregate points-at-stake; within a topic the weakest
+/// (highest points) card comes first; ties broken by `card_id` for determinism.
+/// Cards with no weighted topic go last (weakest-first, then card_id).
+pub(crate) fn interleave_reviews_by_weakness(
+    cards: &[(i64, Option<usize>, f64)],
+    weights: &[(String, f64)],
+) -> Vec<i64> {
+    use std::collections::HashMap;
+    let points = |topic: Option<usize>, r: f64| -> f64 {
+        let w = topic
+            .and_then(|i| weights.get(i))
+            .map(|(_, w)| *w)
+            .unwrap_or(0.0);
+        (1.0 - r) * w
+    };
+    // Aggregate points per topic => topic run order (desc, tie by index).
+    let mut agg: HashMap<usize, f64> = HashMap::new();
+    for (_, topic, r) in cards {
+        if let Some(t) = topic {
+            *agg.entry(*t).or_default() += points(Some(*t), *r);
+        }
+    }
+    let mut ordered_topics: Vec<usize> = agg.keys().copied().collect();
+    ordered_topics.sort_by(|a, b| {
+        agg[b]
+            .partial_cmp(&agg[a])
+            .unwrap_or(std::cmp::Ordering::Equal)
+            .then(a.cmp(b))
+    });
+    // Global points-desc sort (deterministic tie by card_id); because
+    // interleave_by_topic preserves input order within a bucket, this yields
+    // weakest-first within each topic.
+    let mut sorted = cards.to_vec();
+    sorted.sort_by(|a, b| {
+        points(b.1, b.2)
+            .partial_cmp(&points(a.1, a.2))
+            .unwrap_or(std::cmp::Ordering::Equal)
+            .then(a.0.cmp(&b.0))
+    });
+    let note_topic: Vec<(i64, Option<usize>)> = sorted.iter().map(|(c, t, _)| (*c, *t)).collect();
+    interleave_by_topic(&ordered_topics, &note_topic)
+}
+
 #[cfg(test)]
 mod test {
     use super::coverage;
     use super::interleave_by_topic;
+    use super::interleave_reviews_by_weakness;
     use super::topic_aggregate;
     use super::topic_index_for_tags;
     use super::wilson_interval;
@@ -330,6 +395,135 @@ mod test {
     fn interleave_unmatched_go_last_in_order() {
         let nt = vec![(1, None), (2, Some(0)), (3, None)];
         assert_eq!(interleave_by_topic(&[0], &nt), vec![2, 1, 3]);
+    }
+
+    #[test]
+    fn review_interleave_orders_by_points_and_interleaves() {
+        // calc (weight .9) has weak cards (low r => high points); linear_algebra
+        // (weight .1) has strong cards. calc aggregate dominates => calc leads the
+        // round-robin; topics alternate: 1,3,2,4.
+        let weights = vec![("calc".into(), 0.9), ("linear_algebra".into(), 0.1)];
+        let cards = vec![
+            (1, Some(0), 0.2), // calc  points=.72
+            (2, Some(0), 0.5), // calc  points=.45
+            (3, Some(1), 0.9), // la    points=.01
+            (4, Some(1), 0.95), // la   points=.005
+        ];
+        assert_eq!(
+            interleave_reviews_by_weakness(&cards, &weights),
+            vec![1, 3, 2, 4]
+        );
+    }
+
+    #[test]
+    fn review_interleave_weakest_first_within_topic() {
+        let weights = vec![("calc".into(), 1.0)];
+        // single topic: order purely by weakness (points desc): 11(.9),12(.5),10(.1)
+        let cards = vec![(10, Some(0), 0.9), (11, Some(0), 0.1), (12, Some(0), 0.5)];
+        assert_eq!(
+            interleave_reviews_by_weakness(&cards, &weights),
+            vec![11, 12, 10]
+        );
+    }
+
+    #[test]
+    fn review_interleave_unmatched_go_last() {
+        let weights = vec![("calc".into(), 1.0)];
+        let cards = vec![(1, None, 0.2), (2, Some(0), 0.2), (3, None, 0.5)];
+        // matched calc card first; unmatched (points 0) last, card_id tiebreak.
+        assert_eq!(
+            interleave_reviews_by_weakness(&cards, &weights),
+            vec![2, 1, 3]
+        );
+    }
+
+    #[test]
+    fn review_interleave_is_deterministic() {
+        let weights = vec![("calc".into(), 0.9), ("la".into(), 0.1)];
+        let cards = vec![(3, Some(0), 0.3), (1, Some(0), 0.3), (2, Some(1), 0.3)];
+        let a = interleave_reviews_by_weakness(&cards, &weights);
+        let b = interleave_reviews_by_weakness(&cards, &weights);
+        assert_eq!(a, b);
+        // equal points in calc => card_id tiebreak (1 before 3); calc agg > la;
+        // interleave: calc(1), la(2), calc(3).
+        assert_eq!(a, vec![1, 2, 3]);
+    }
+
+    #[test]
+    fn speedrun_interleave_reviews_config_gated_and_order_only() -> Result<()> {
+        use crate::prelude::*;
+        use crate::scheduler::queue::DueCard;
+        use crate::scheduler::queue::DueCardKind;
+
+        let mut col = Collection::new();
+        let nt = col.get_notetype_by_name("Basic")?.unwrap();
+        let mut ids: Vec<(CardId, NoteId)> = Vec::new();
+        for (front, tag) in [("calc1", "calc"), ("calc2", "calc"), ("la1", "linear_algebra")] {
+            let mut note = nt.new_note();
+            note.set_field(0, front)?;
+            col.add_note(&mut note, DeckId(1))?;
+            note.tags = vec![tag.into()];
+            col.update_note(&mut note)?;
+            let card = col.storage.all_cards_of_note(note.id)?.pop().unwrap();
+            ids.push((card.id, card.note_id));
+        }
+        let make_review = |ids: &[(CardId, NoteId)]| -> Vec<DueCard> {
+            ids.iter()
+                .map(|(cid, nid)| DueCard {
+                    id: *cid,
+                    note_id: *nid,
+                    mtime: TimestampSecs(0),
+                    due: 0,
+                    current_deck_id: DeckId(1),
+                    original_deck_id: DeckId(1),
+                    kind: DueCardKind::Review,
+                    reps: 1,
+                })
+                .collect()
+        };
+        let input: Vec<CardId> = ids.iter().map(|(c, _)| *c).collect();
+
+        // (a) no config => untouched Anki order.
+        let mut review = make_review(&ids);
+        col.speedrun_interleave_reviews(&mut review)?;
+        assert_eq!(review.iter().map(|d| d.id).collect::<Vec<_>>(), input);
+
+        // (b) FeatureOff => still no-op.
+        col.set_config_json(
+            "speedrun:review_interleave",
+            &serde_json::json!({"mode": 1, "weights": [["calc", 0.9], ["linear_algebra", 0.1]]}),
+            false,
+        )?;
+        let mut review = make_review(&ids);
+        col.speedrun_interleave_reviews(&mut review)?;
+        assert_eq!(review.iter().map(|d| d.id).collect::<Vec<_>>(), input);
+
+        let due_before: Vec<i32> = ids
+            .iter()
+            .map(|(c, _)| col.storage.get_card(*c).unwrap().unwrap().due)
+            .collect();
+
+        // (c) Full => topic interleave reorders [calc1, calc2, la1] -> [calc1, la1, calc2].
+        col.set_config_json(
+            "speedrun:review_interleave",
+            &serde_json::json!({"mode": 0, "weights": [["calc", 0.9], ["linear_algebra", 0.1]]}),
+            false,
+        )?;
+        let mut review = make_review(&ids);
+        col.speedrun_interleave_reviews(&mut review)?;
+        assert_eq!(
+            review.iter().map(|d| d.id).collect::<Vec<_>>(),
+            vec![ids[0].0, ids[2].0, ids[1].0],
+            "Full interleaves topics (no two adjacent same-topic)"
+        );
+
+        // Order-only safety: card scheduling state is untouched by the reorder.
+        let due_after: Vec<i32> = ids
+            .iter()
+            .map(|(c, _)| col.storage.get_card(*c).unwrap().unwrap().due)
+            .collect();
+        assert_eq!(due_before, due_after, "interleave must not mutate card state");
+        Ok(())
     }
 
     #[test]
