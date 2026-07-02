@@ -78,14 +78,15 @@ License: GNU AGPL, version 3 or later; http://www.gnu.org/licenses/agpl.html
         }
     }
     .label {
-        font-family: var(--mono);
+        font-family: var(--disp);
         font-size: 10px;
         letter-spacing: 0.24em;
         color: var(--muted);
         text-transform: uppercase;
     }
     .val {
-        font-family: var(--mono);
+        font-family: var(--disp);
+        font-variant-numeric: tabular-nums;
         font-size: clamp(20px, 6vw, 26px);
         font-weight: 500;
         margin-top: 8px;

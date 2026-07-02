@@ -140,7 +140,7 @@ calmly. Reuses the frozen SpeedrunService RPCs via @speedrun/data.
         --line: #232a33;
         --fg: #e6eaef;
         --muted: #7c8794;
-        --pace: #e8b23a;
+        --pace: #f4f7fa;
 
         /* Mobile-first base: full width, no side borders */
         width: 100%;
@@ -165,7 +165,7 @@ calmly. Reuses the frozen SpeedrunService RPCs via @speedrun/data.
 
     .spinner,
     .empty {
-        font-family: var(--mono);
+        font-family: var(--disp);
         font-size: 13px;
         letter-spacing: 0.08em;
         color: var(--muted);
@@ -175,7 +175,7 @@ calmly. Reuses the frozen SpeedrunService RPCs via @speedrun/data.
 
     .foot {
         padding: 14px 28px 26px;
-        font-family: var(--mono);
+        font-family: var(--disp);
         font-size: 10px;
         color: var(--muted);
         letter-spacing: 0.1em;
@@ -186,7 +186,7 @@ calmly. Reuses the frozen SpeedrunService RPCs via @speedrun/data.
         padding: 0 28px 26px;
     }
     .memory-link a {
-        font-family: var(--mono);
+        font-family: var(--disp);
         font-size: 11px;
         letter-spacing: 0.18em;
         color: var(--muted);
@@ -229,7 +229,7 @@ calmly. Reuses the frozen SpeedrunService RPCs via @speedrun/data.
         }
     }
     .startstatus-text {
-        font-family: var(--mono);
+        font-family: var(--disp);
         font-size: 12px;
         letter-spacing: 0.06em;
         color: var(--fg);
@@ -237,7 +237,7 @@ calmly. Reuses the frozen SpeedrunService RPCs via @speedrun/data.
         line-height: 1.5;
     }
     .startstatus-btn {
-        font-family: var(--mono);
+        font-family: var(--disp);
         font-weight: 600;
         font-size: 12px;
         letter-spacing: 0.14em;
@@ -264,7 +264,7 @@ calmly. Reuses the frozen SpeedrunService RPCs via @speedrun/data.
     }
     .startstatus-close {
         flex: 0 0 auto;
-        font-family: var(--mono);
+        font-family: var(--disp);
         font-size: 14px;
         line-height: 1;
         background: transparent;

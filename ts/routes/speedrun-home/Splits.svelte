@@ -78,7 +78,7 @@ License: GNU AGPL, version 3 or later; http://www.gnu.org/licenses/agpl.html
         }
     }
     .splits-hd h2 {
-        font-family: var(--mono);
+        font-family: var(--disp);
         font-size: 12px;
         letter-spacing: 0.28em;
         color: var(--fg);
@@ -86,7 +86,7 @@ License: GNU AGPL, version 3 or later; http://www.gnu.org/licenses/agpl.html
         font-weight: 600;
     }
     .sort {
-        font-family: var(--mono);
+        font-family: var(--disp);
         font-size: 11px;
         letter-spacing: 0.12em;
         color: var(--muted);
@@ -112,7 +112,8 @@ License: GNU AGPL, version 3 or later; http://www.gnu.org/licenses/agpl.html
         border-top: 1px solid var(--line);
     }
     .seg .num {
-        font-family: var(--mono);
+        font-family: var(--disp);
+        font-variant-numeric: tabular-nums;
         color: var(--pace);
         font-size: 12px;
         letter-spacing: 0.1em;
@@ -125,7 +126,8 @@ License: GNU AGPL, version 3 or later; http://www.gnu.org/licenses/agpl.html
         text-transform: uppercase;
     }
     .seg .wt {
-        font-family: var(--mono);
+        font-family: var(--disp);
+        font-variant-numeric: tabular-nums;
         color: var(--muted);
         font-size: 11px;
         float: right;

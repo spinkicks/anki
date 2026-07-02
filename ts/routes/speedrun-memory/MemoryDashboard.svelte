@@ -133,7 +133,7 @@ License: GNU AGPL, version 3 or later; http://www.gnu.org/licenses/agpl.html
         --line: #232a33;
         --fg: #e6eaef;
         --muted: #7c8794;
-        --pace: #e8b23a;
+        --pace: #f4f7fa;
 
         /* Mobile-first base: full width, compact padding */
         width: 100%;
@@ -167,7 +167,7 @@ License: GNU AGPL, version 3 or later; http://www.gnu.org/licenses/agpl.html
         color: var(--fg);
     }
     .titlebar button {
-        font-family: var(--mono);
+        font-family: var(--disp);
         font-size: 11px;
         letter-spacing: 0.12em;
         text-transform: uppercase;
@@ -190,13 +190,15 @@ License: GNU AGPL, version 3 or later; http://www.gnu.org/licenses/agpl.html
         font-weight: 600;
         color: var(--fg);
         font-size: 13px;
-        font-family: var(--mono);
+        font-family: var(--disp);
+        font-variant-numeric: tabular-nums;
     }
     .updated {
         float: right;
         font-weight: 400;
         color: var(--muted);
-        font-family: var(--mono);
+        font-family: var(--disp);
+        font-variant-numeric: tabular-nums;
     }
     /* "Weakest first" label: 44px touch target on mobile */
     .sort {
@@ -204,7 +206,7 @@ License: GNU AGPL, version 3 or later; http://www.gnu.org/licenses/agpl.html
         align-items: center;
         gap: 8px;
         min-height: 44px;
-        font-family: var(--mono);
+        font-family: var(--disp);
         font-size: 12px;
         letter-spacing: 0.1em;
         text-transform: uppercase;
@@ -216,7 +218,7 @@ License: GNU AGPL, version 3 or later; http://www.gnu.org/licenses/agpl.html
     }
     .spinner,
     .empty {
-        font-family: var(--mono);
+        font-family: var(--disp);
         font-size: 13px;
         letter-spacing: 0.08em;
         color: var(--muted);
@@ -245,7 +247,7 @@ License: GNU AGPL, version 3 or later; http://www.gnu.org/licenses/agpl.html
         color: var(--muted);
         border-bottom: 1px solid var(--line);
         padding: 6px 4px;
-        font-family: var(--mono);
+        font-family: var(--disp);
         letter-spacing: 0.06em;
         text-transform: uppercase;
     }
@@ -297,7 +299,7 @@ License: GNU AGPL, version 3 or later; http://www.gnu.org/licenses/agpl.html
         font-weight: 700;
         padding-top: 8px;
         color: var(--fg);
-        font-family: var(--mono);
+        font-family: var(--disp);
         letter-spacing: 0.12em;
         text-transform: uppercase;
         font-size: 11px;

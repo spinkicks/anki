@@ -72,7 +72,7 @@ License: GNU AGPL, version 3 or later; http://www.gnu.org/licenses/agpl.html
         color: var(--pace);
     }
     .subtitle {
-        font-family: var(--mono);
+        font-family: var(--disp);
         font-size: 11px;
         letter-spacing: 0.28em;
         color: var(--muted);
@@ -81,7 +81,8 @@ License: GNU AGPL, version 3 or later; http://www.gnu.org/licenses/agpl.html
     }
     /* Mobile-first: status left-aligned; desktop restore: right-aligned */
     .status {
-        font-family: var(--mono);
+        font-family: var(--disp);
+        font-variant-numeric: tabular-nums;
         font-size: 11px;
         letter-spacing: 0.18em;
         color: var(--muted);
