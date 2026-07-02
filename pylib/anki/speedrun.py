@@ -54,7 +54,11 @@ class SpeedrunManager:
         self.col.set_config(f"speedrun:exam_profile:{exam_id}", profile_json)
 
     def performance_readiness(self, topics: list[str]) -> PerformanceReadinessResponse:
-        """SCAFFOLDING (non-AI): always-abstaining Performance/Readiness placeholders."""
+        """Per-topic Performance (P(correct on a novel problem), from problem
+        accuracy; abstains below the attempt threshold) + overall Readiness
+        (flat-IRT 200-990 + conformal interval + config-driven give-up with
+        unlock_requirements). Real, honest, non-AI numbers recomputed from synced
+        collection data; abstains until there is enough data. Read-only."""
         return self.col._backend.get_performance_readiness(topics=topics)
 
     def reorder_new(

@@ -177,19 +177,11 @@ pub(crate) fn interleave_reviews_by_weakness(
 // ---- Scoring config (parsed from the exam-profile JSON; all fields defaulted so
 // a profile with no "scoring" block still yields sane, documented defaults). ----
 
-#[derive(Debug, Clone, serde::Deserialize)]
+#[derive(Debug, Clone, Default, serde::Deserialize)]
 #[serde(default)]
 pub(crate) struct ScoringConfig {
     pub performance: PerfScoreConfig,
     pub readiness: ReadinessScoreConfig,
-}
-impl Default for ScoringConfig {
-    fn default() -> Self {
-        Self {
-            performance: PerfScoreConfig::default(),
-            readiness: ReadinessScoreConfig::default(),
-        }
-    }
 }
 
 #[derive(Debug, Clone, serde::Deserialize)]
@@ -477,7 +469,7 @@ mod test {
         let mut cids = Vec::new();
         for i in 0..3 {
             let mut note = nt.new_note();
-            note.set_field(0, &format!("q{i}"))?;
+            note.set_field(0, format!("q{i}"))?;
             col.add_note(&mut note, DeckId(1))?;
             note.tags = vec!["calc::integration".into()];
             col.update_note(&mut note)?;
