@@ -23,6 +23,23 @@ if TYPE_CHECKING:
     from anki.collection import Collection
     from anki.decks import DeckId
 
+# A mini-mock must draw at least one problem, and a filtered-deck search term
+# with limit=0 pulls zero cards -> Anki raises FilteredDeckError
+# (SearchReturnedNoCards) and the launch crashes. Clamp the config-driven size
+# to a sane [floor, cap] window so a bad/absent config value can never take the
+# search-term limit out of range. The cap is a generous upper bound (a single
+# timed mini-mock is a short pass, not the whole bank).
+MINI_MOCK_SIZE_FLOOR = 1
+MINI_MOCK_SIZE_CAP = 500
+
+
+def clamp_mini_mock_size(size: int) -> int:
+    """Clamp a config-driven mini-mock size into ``[floor, cap]``.
+
+    Guards the ``limit=0`` (and negative/absurd) crash: see the constants above.
+    """
+    return max(MINI_MOCK_SIZE_FLOOR, min(int(size), MINI_MOCK_SIZE_CAP))
+
 
 class MiniMockDecision(NamedTuple):
     # "importNeeded": Problems subdeck absent, or present but every problem card
@@ -101,6 +118,11 @@ def build_mini_mock_deck(col: Collection, problems_deck_name: str, size: int) ->
     in ``revlog.taken_millis`` either way).
     """
     from anki.decks import DeckId, FilteredDeckConfig
+
+    # Clamp defensively: a limit=0 (or negative) search term pulls zero cards and
+    # makes Anki raise FilteredDeckError, crashing the launch. Clamp here too (not
+    # only at the config read site) so this helper is safe for any caller.
+    size = clamp_mini_mock_size(size)
 
     name = "Speedrun Mini-Mock"
     # Resolve an EXISTING mini-mock filtered deck by name and UPDATE it in place;

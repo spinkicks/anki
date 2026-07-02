@@ -115,9 +115,18 @@ class SpeedrunHome(QDialog):
         # Android note: Android gets the same problem bank via the seed .apkg and
         # studies the Problems subdeck through its native reviewer; a bespoke
         # Android timed mini-mock UI is DEFERRED this cycle (no anki-android code).
-        from aqt.speedrun_logic import build_mini_mock_deck, decide_mini_mock
+        from aqt.speedrun_logic import (
+            build_mini_mock_deck,
+            clamp_mini_mock_size,
+            decide_mini_mock,
+        )
 
-        size = int(self.mw.col.get_config("speedrun:mini_mock_size", 10))
+        # Clamp the config value here (defense-in-depth; build_mini_mock_deck also
+        # clamps): a 0/negative size would make the filtered-deck search-term
+        # limit=0, pulling zero cards -> FilteredDeckError -> the launch crashes.
+        size = clamp_mini_mock_size(
+            int(self.mw.col.get_config("speedrun:mini_mock_size", 10))
+        )
         decision = decide_mini_mock(self.mw.col, self.PROBLEM_DECK)
         if decision.status == "importNeeded":
             self.web.eval(
@@ -125,7 +134,18 @@ class SpeedrunHome(QDialog):
                 ' && window.speedrunStartStatus("importNeeded");'
             )
         else:  # "ready" — build the filtered deck and launch the reviewer.
-            did = build_mini_mock_deck(self.mw.col, self.PROBLEM_DECK, size)
+            # The build can still fail honestly (e.g. every matching problem card
+            # got suspended between decide and build -> SearchReturnedNoCards).
+            # Surface that IN our page via the same banner mechanism instead of
+            # letting an uncaught exception crash the launch. Never fake success.
+            try:
+                did = build_mini_mock_deck(self.mw.col, self.PROBLEM_DECK, size)
+            except Exception:
+                self.web.eval(
+                    "window.speedrunStartStatus"
+                    ' && window.speedrunStartStatus("mockFailed");'
+                )
+                return
             self.mw.col.decks.select(did)
             self.close()
             self.mw.moveToState("review")

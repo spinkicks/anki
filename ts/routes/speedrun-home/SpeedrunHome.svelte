@@ -24,8 +24,9 @@ calmly. Reuses the frozen SpeedrunService RPCs via @speedrun/data.
 
     // Inline START RUN status banner. The Qt shell drives this via web.eval
     // (window.speedrunStartStatus) when it can't launch study: "importNeeded"
-    // (exam deck missing) or "caughtUp" (nothing due; optional n = new cards
-    // that unlock next). Null = hidden. pycmd is injected by the Anki webview
+    // (exam deck missing), "caughtUp" (nothing due; optional n = new cards
+    // that unlock next), or "mockFailed" (the timed mini-mock build found no
+    // eligible problems). Null = hidden. pycmd is injected by the Anki webview
     // (not in the SvelteKit TS scope), so we cast when reaching for it.
     type StartStatus = { state: string; n?: number };
     let startStatus: StartStatus | null = null;
@@ -96,6 +97,21 @@ calmly. Reuses the frozen SpeedrunService RPCs via @speedrun/data.
                         on:click={() => fire("startrun:customstudy")}
                     >
                         Custom Study
+                    </button>
+                {:else if startStatus.state === "mockFailed"}
+                    <!-- Honest failure state: the Qt shell couldn't build the
+                         timed mini-mock (e.g. no eligible problem cards). No
+                         fake success — tell the user plainly. -->
+                    <span class="startstatus-text">
+                        Couldn't start a timed mini-mock — no eligible problems
+                        found. Import or unsuspend the GRE problem bank and try
+                        again.
+                    </span>
+                    <button
+                        class="startstatus-btn"
+                        on:click={() => fire("startrun:import")}
+                    >
+                        Import deck
                     </button>
                 {/if}
             </div>

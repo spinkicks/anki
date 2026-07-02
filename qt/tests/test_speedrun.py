@@ -168,6 +168,48 @@ def test_build_mini_mock_deck() -> None:
         col.close()
 
 
+def test_build_mini_mock_deck_size_zero_clamps_and_builds() -> None:
+    # Regression (P2 FIX A): a config mini_mock_size of 0 used to reach the
+    # filtered-deck build as limit=0, which pulls zero cards and makes Anki raise
+    # FilteredDeckError (SearchReturnedNoCards) -> the mini-mock launch crashed.
+    # build_mini_mock_deck must clamp size to a >=1 floor so a real deck builds.
+    col = _empty_col()
+    try:
+        deck_id = col.decks.id(PROBLEM_DECK)
+        assert deck_id is not None
+        for _ in range(3):
+            _add_problem_card(col, deck_id)
+
+        # Must NOT raise, and must produce a usable filtered deck.
+        did = build_mini_mock_deck(col, PROBLEM_DECK, 0)
+        assert did
+
+        deck = col.sched.get_or_create_filtered_deck(did)
+        term = deck.config.search_terms[0]
+        assert term.limit >= 1, f"size 0 must clamp to >=1, got {term.limit}"
+        held = col.find_cards(f'deck:"{MINI_MOCK_DECK}"')
+        assert len(held) >= 1, "clamped mini-mock must hold at least one card"
+    finally:
+        col.close()
+
+
+def test_build_mini_mock_deck_negative_size_clamps_and_builds() -> None:
+    # A negative config value (also invalid) must clamp the same way and build.
+    col = _empty_col()
+    try:
+        deck_id = col.decks.id(PROBLEM_DECK)
+        assert deck_id is not None
+        for _ in range(3):
+            _add_problem_card(col, deck_id)
+
+        did = build_mini_mock_deck(col, PROBLEM_DECK, -5)
+        assert did
+        deck = col.sched.get_or_create_filtered_deck(did)
+        assert deck.config.search_terms[0].limit >= 1
+    finally:
+        col.close()
+
+
 def test_build_mini_mock_deck_reuses_existing_no_orphans() -> None:
     # Regression: building the mini-mock deck twice must reuse the SAME filtered
     # deck (resolve-by-name then update in place), not create a second deck that
