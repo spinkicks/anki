@@ -68,6 +68,12 @@ License: GNU AGPL, version 3 or later; http://www.gnu.org/licenses/agpl.html
 
 <div class="memory">
     <header>
+        <!-- Back to Home. Symmetric with Home's `<a href="/speedrun-memory">
+             MEMORY ▸</a>` forward link — same SvelteKit client-side route, so it
+             works on BOTH desktop (Qt webview) and Android (PageFragment webview)
+             with zero native code. (The `open:memory` Qt bridge handler is unused
+             dead code; the real nav is anchor-based.) -->
+        <a class="home-link" href="/speedrun-home">‹ HOME</a>
         <div class="titlebar">
             <h1>Memory</h1>
             <button on:click={refresh}>Refresh</button>
@@ -150,6 +156,29 @@ License: GNU AGPL, version 3 or later; http://www.gnu.org/licenses/agpl.html
             padding: 16px;
             border-left: 1px solid var(--line);
             border-right: 1px solid var(--line);
+        }
+    }
+    /* Back-to-Home affordance. Mirrors Home's forward "MEMORY ▸" link style
+       (muted uppercase, widens tracking, brightens on hover/focus). Sized as a
+       ≥44px touch target on mobile. */
+    .home-link {
+        display: inline-flex;
+        align-items: center;
+        min-height: 44px;
+        font-family: var(--disp);
+        font-size: 11px;
+        letter-spacing: 0.18em;
+        color: var(--muted);
+        text-decoration: none;
+        text-transform: uppercase;
+    }
+    .home-link:hover,
+    .home-link:focus-visible {
+        color: var(--fg);
+    }
+    @media (min-width: 768px) {
+        .home-link {
+            min-height: 0;
         }
     }
     .titlebar {
