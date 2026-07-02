@@ -100,17 +100,14 @@ License: GNU AGPL, version 3 or later; http://www.gnu.org/licenses/agpl.html
                     <th>RECALL</th>
                     <th>RANGE (95%)</th>
                     <th>DATA</th>
-                    <th>
-                        PERFORMANCE <span class="scaffolding-note">(scaffolding)</span>
-                    </th>
-                    <th>
-                        READINESS <span class="scaffolding-note">(scaffolding)</span>
-                    </th>
+                    <th>PERFORMANCE</th>
+                    <th>READINESS</th>
+                    <th>GAP (Δ)</th>
                 </tr>
             </thead>
             {#each groups as g}
                 <tbody>
-                    <tr class="grouphdr"><td colspan="6">{g.header.label}</td></tr>
+                    <tr class="grouphdr"><td colspan="7">{g.header.label}</td></tr>
                     {#each g.leaves as row (row.id)}
                         <TopicRow {row} scaffold={scaffold.get(row.id)} />
                     {/each}
@@ -249,13 +246,6 @@ License: GNU AGPL, version 3 or later; http://www.gnu.org/licenses/agpl.html
         letter-spacing: 0.06em;
         text-transform: uppercase;
     }
-    .scaffolding-note {
-        font-size: 0.85em;
-        font-weight: 400;
-        color: var(--muted);
-        font-style: italic;
-    }
-
     /* Mobile: td padding (base) */
     :global(.memory td) {
         padding: 6px 4px;

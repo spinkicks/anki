@@ -3,9 +3,14 @@ Copyright: Ankitects Pty Ltd and contributors
 License: GNU AGPL, version 3 or later; http://www.gnu.org/licenses/agpl.html
 -->
 <script lang="ts">
+    import type { PerformanceHeadline, ReadinessHeadline } from "./data";
+
     export let coverage: { covered: number; total: number; percent: number };
     // memoryVerified.timed = non-abstained leaves; .total = leaves with data.
     export let memoryVerified: { timed: number; total: number };
+    // Honest headline stats from the engine (abstain until real data exists).
+    export let performance: PerformanceHeadline;
+    export let readiness: ReadinessHeadline;
 
     // Meter widths clamp to [0,100]. Memory meter = timed / total; guard /0 so a
     // fresh deck (no data yet) reads a calm empty meter rather than NaN.
@@ -37,13 +42,50 @@ License: GNU AGPL, version 3 or later; http://www.gnu.org/licenses/agpl.html
         <div class="meter"><i style={`width:${memoryPct}%`}></i></div>
     </div>
     <div class="stat">
-        <!-- Readiness is always-abstaining scaffolding today (real model later).
-             Shown calmly muted with an empty amber (pace) meter. -->
+        <!-- Performance = demonstrated problem accuracy (ETS-weighted), only once
+             a topic has real timed data; abstains calmly otherwise. -->
+        <div class="label">Performance</div>
+        {#if performance.abstained}
+            <div class="val muted">
+                — <small>abstains</small>
+            </div>
+            <div class="meter"><i style="width:0%"></i></div>
+        {:else}
+            <div class="val">
+                {Math.round(performance.pct)}%
+                <small>/{performance.timedTopics} timed</small>
+            </div>
+            <div class="meter">
+                <i style={`width:${Math.round(performance.pct)}%`}></i>
+            </div>
+        {/if}
+    </div>
+    <div class="stat">
+        <!-- Readiness = exam-level 200–990. Abstains (with an unlock hint) until
+             the engine's give-up rule is met; never a guessed number. -->
         <div class="label">Readiness · pace</div>
-        <div class="val muted">
-            — <small>abstains</small>
-        </div>
-        <div class="meter pace"><i style="width:0%"></i></div>
+        {#if readiness.abstained}
+            <div class="val muted">
+                — <small>abstains</small>
+            </div>
+            <div class="meter pace"><i style="width:0%"></i></div>
+            {#if readiness.unlockHuman}
+                <div class="hint">{readiness.unlockHuman}</div>
+            {:else if readiness.reason}
+                <div class="hint">{readiness.reason}</div>
+            {/if}
+        {:else}
+            <div class="val">
+                {Math.round(readiness.point)}
+                <small>·{Math.round(readiness.percentile)}%ile</small>
+            </div>
+            <div class="meter pace">
+                <i style={`width:${Math.round(readiness.meterPct)}%`}></i>
+            </div>
+            <div class="hint">
+                {Math.round(readiness.lower)}–{Math.round(readiness.upper)} (95%)
+            </div>
+        {/if}
     </div>
 </div>
 
@@ -97,6 +139,14 @@ License: GNU AGPL, version 3 or later; http://www.gnu.org/licenses/agpl.html
     .val small {
         color: var(--muted);
         font-size: 14px;
+    }
+    .hint {
+        margin-top: 8px;
+        font-family: var(--mono);
+        font-size: 10px;
+        letter-spacing: 0.08em;
+        color: var(--muted);
+        text-transform: uppercase;
     }
     .meter {
         height: 6px;
