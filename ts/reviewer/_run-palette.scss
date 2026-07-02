@@ -1,0 +1,44 @@
+/* Copyright: Ankitects Pty Ltd and contributors
+ * License: GNU AGPL, version 3 or later; http://www.gnu.org/licenses/agpl.html */
+
+// "The Run" dark chrome palette for the reviewer.
+// Overrides CSS custom properties under :root.night-mode so that
+// only the chrome (background, surfaces, borders, buttons, text) is
+// re-colored. Card content (#qa / user template) is untouched.
+// Scheduling logic lives in Python/Rust and is not affected.
+//
+// Variables overridden here all exist in ts/lib/sass/_vars.scss and are
+// present in the compiled :root.night-mode block.
+
+:root.night-mode {
+    // Main window background
+    --canvas: #0b0e12;
+
+    // Elevated surfaces (containers, toolbars)
+    --canvas-elevated: #12161c;
+
+    // Inset surfaces (inputs inside containers)
+    --canvas-inset: #0b0e12;
+
+    // Default text / icon color
+    --fg: #e6eaef;
+
+    // Border (medium contrast against background)
+    --border: #232a33;
+
+    // Border (low contrast)
+    --border-subtle: #1a1f27;
+
+    // Button background
+    --button-bg: #12161c;
+
+    // Button gradient (both ends same dark surface for flat look)
+    --button-gradient-start: #1a1f27;
+    --button-gradient-end: #12161c;
+
+    // Button hover border
+    --button-hover-border: #2e3844;
+
+    // Box-shadow color
+    --shadow: #070a0d;
+}

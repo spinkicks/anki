@@ -4,6 +4,7 @@
 @use "sass:string";
 @use "../lib/sass/vars";
 @use "../routes/image-occlusion/review";
+@use "run-palette";
 
 hr {
     background-color: vars.palette(darkgray, 0);

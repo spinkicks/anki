@@ -82,3 +82,28 @@ button {
         border-top-color: color(border-subtle);
     }
 }
+
+// "The Run" dark chrome — bottom bar override
+:root.night-mode {
+    --canvas: #0b0e12;
+    --canvas-elevated: #12161c;
+    --fg: #e6eaef;
+    --border: #232a33;
+    --border-subtle: #1a1f27;
+    --button-bg: #12161c;
+    --button-gradient-start: #1a1f27;
+    --button-gradient-end: #12161c;
+    --button-hover-border: #2e3844;
+    --shadow: #070a0d;
+}
+
+.nightMode {
+    background-color: var(--canvas);
+    color: var(--fg);
+
+    button {
+        background: var(--button-bg);
+        color: var(--fg);
+        border-color: var(--border);
+    }
+}
