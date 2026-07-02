@@ -16,15 +16,18 @@ License: GNU AGPL, version 3 or later; http://www.gnu.org/licenses/agpl.html
     // A cell renders a real band only when the engine marks it non-abstained.
     $: perfReal = perf?.abstained === false;
     $: readyReal = ready?.abstained === false;
-    // Tooltips surface the percentile when present (0 while abstaining).
-    $: perfTitle = perfReal && perf ? `Percentile ${Math.round(perf.percentile)}` : "";
-    $: readyTitle =
-        readyReal && ready ? `Percentile ${Math.round(ready.percentile)}` : "";
-
     // §7d gap meter: declarative recall − problem accuracy. Only meaningful when
-    // Performance is real (both sides present); otherwise honest "—".
+    // BOTH sides are real — Performance is present (perfReal) AND the topic has
+    // declarative recall data (row not abstained). Otherwise honest "—". (Without
+    // the recall guard, a problems-only topic showed a fake "+0.00".)
+    // No percentile tooltip: per-topic Performance percentile is always 0 and
+    // per-topic Readiness always abstains, so a "Percentile 0" tooltip would be a
+    // fabricated number.
     $: gap = scaffold?.gapDelta ?? 0;
-    $: gapText = perfReal ? `${gap >= 0 ? "+" : "−"}${Math.abs(gap).toFixed(2)}` : "—";
+    $: gapText =
+        perfReal && !row.abstained
+            ? `${gap >= 0 ? "+" : "−"}${Math.abs(gap).toFixed(2)}`
+            : "—";
 </script>
 
 <tr class:abstained={row.abstained}>
@@ -47,7 +50,7 @@ License: GNU AGPL, version 3 or later; http://www.gnu.org/licenses/agpl.html
         </td>
     {/if}
     <td class="data">{row.masteredCount}/{row.cardsWithData} cards</td>
-    <td class="scaffold c-perf" title={perfTitle}>
+    <td class="scaffold c-perf">
         {#if perfReal && perf}
             <RangeBand
                 lower={perf.lower}
@@ -59,7 +62,7 @@ License: GNU AGPL, version 3 or later; http://www.gnu.org/licenses/agpl.html
             —
         {/if}
     </td>
-    <td class="scaffold c-ready" title={readyTitle}>
+    <td class="scaffold c-ready">
         {#if readyReal && ready}
             <RangeBand
                 lower={ready.lower}

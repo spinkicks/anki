@@ -77,7 +77,7 @@ License: GNU AGPL, version 3 or later; http://www.gnu.org/licenses/agpl.html
         {:else}
             <div class="val">
                 {Math.round(readiness.point)}
-                <small>·{Math.round(readiness.percentile)}%ile</small>
+                <small>/990</small>
             </div>
             <div class="meter pace">
                 <i style={`width:${Math.round(readiness.meterPct)}%`}></i>

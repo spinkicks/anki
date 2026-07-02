@@ -31,7 +31,14 @@ calmly. Reuses the frozen SpeedrunService RPCs via @speedrun/data.
     let startStatus: StartStatus | null = null;
 
     function fire(cmd: string) {
-        (globalThis as { pycmd?: (cmd: string) => void }).pycmd?.(cmd);
+        // Desktop aliases pycmd===bridgeCommand; Android's PageFragment injects
+        // ONLY bridgeCommand. Fire exactly one, preferring pycmd — mirrors
+        // ActionBar so the status-banner actions work on Android too (were dead).
+        const g = globalThis as {
+            pycmd?: (cmd: string) => void;
+            bridgeCommand?: (cmd: string) => void;
+        };
+        (g.pycmd ?? g.bridgeCommand)?.(cmd);
     }
 
     async function refresh() {
