@@ -297,11 +297,12 @@ impl Collection {
         Ok(queues)
     }
 
-    /// Weakness × ETS-weight interleave of the gathered REVIEW queue, gated by the
-    /// synced `speedrun:review_interleave` config. Only `AblationMode::Full`
-    /// reorders; FeatureOff/Plain (or absent config) leave Anki's SQL review order
-    /// untouched. Read-only: permutes `review` in place — never writes cards, never
-    /// transacts, never changes scheduling state (due/interval/reps).
+    /// Weakness × ETS-weight interleave of the gathered REVIEW queue, gated by
+    /// the synced `speedrun:review_interleave` config. Only
+    /// `AblationMode::Full` reorders; FeatureOff/Plain (or absent config)
+    /// leave Anki's SQL review order untouched. Read-only: permutes
+    /// `review` in place — never writes cards, never transacts, never
+    /// changes scheduling state (due/interval/reps).
     pub(crate) fn speedrun_interleave_reviews(&mut self, review: &mut Vec<DueCard>) -> Result<()> {
         use fsrs::FSRS;
         use fsrs::FSRS5_DEFAULT_DECAY;

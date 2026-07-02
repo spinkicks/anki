@@ -131,9 +131,10 @@ pub(crate) struct ReviewInterleaveConfig {
 /// avoidable).
 ///
 /// `points_at_stake = (1 - retrievability) * topic_weight` (weakness × weight).
-/// Topics run in descending aggregate points-at-stake; within a topic the weakest
-/// (highest points) card comes first; ties broken by `card_id` for determinism.
-/// Cards with no weighted topic go last (weakest-first, then card_id).
+/// Topics run in descending aggregate points-at-stake; within a topic the
+/// weakest (highest points) card comes first; ties broken by `card_id` for
+/// determinism. Cards with no weighted topic go last (weakest-first, then
+/// card_id).
 pub(crate) fn interleave_reviews_by_weakness(
     cards: &[(i64, Option<usize>, f64)],
     weights: &[(String, f64)],
@@ -174,8 +175,9 @@ pub(crate) fn interleave_reviews_by_weakness(
     interleave_by_topic(&ordered_topics, &note_topic)
 }
 
-// ---- Scoring config (parsed from the exam-profile JSON; all fields defaulted so
-// a profile with no "scoring" block still yields sane, documented defaults). ----
+// ---- Scoring config (parsed from the exam-profile JSON; all fields defaulted
+// so a profile with no "scoring" block still yields sane, documented defaults).
+// ----
 
 #[derive(Debug, Clone, Default, serde::Deserialize)]
 #[serde(default)]
@@ -266,7 +268,8 @@ impl Default for GiveUpConfig {
     }
 }
 
-/// Parse `topic id -> ets_weight` from an exam-profile JSON string (missing => {}).
+/// Parse `topic id -> ets_weight` from an exam-profile JSON string (missing =>
+/// {}).
 pub(crate) fn exam_topic_weights(profile_json: &str) -> std::collections::HashMap<String, f64> {
     #[derive(serde::Deserialize)]
     struct T {
@@ -284,8 +287,8 @@ pub(crate) fn exam_topic_weights(profile_json: &str) -> std::collections::HashMa
         .unwrap_or_default()
 }
 
-/// Parse the `scoring` block from an exam-profile JSON string; missing/invalid =>
-/// documented defaults (never fails).
+/// Parse the `scoring` block from an exam-profile JSON string; missing/invalid
+/// => documented defaults (never fails).
 pub(crate) fn scoring_config_from_profile(profile_json: &str) -> ScoringConfig {
     #[derive(serde::Deserialize)]
     struct Wrapper {
@@ -297,9 +300,9 @@ pub(crate) fn scoring_config_from_profile(profile_json: &str) -> ScoringConfig {
         .unwrap_or_default()
 }
 
-/// Weighted ability in [0,1] = Σ(weight × perf) / Σweight over topics that have a
-/// Performance number. Returns None when no weighted topic has data (=> abstain).
-/// This is the flat "calculus-weighted topic sum" (NOT a min()-gate).
+/// Weighted ability in [0,1] = Σ(weight × perf) / Σweight over topics that have
+/// a Performance number. Returns None when no weighted topic has data (=>
+/// abstain). This is the flat "calculus-weighted topic sum" (NOT a min()-gate).
 pub(crate) fn weighted_ability(topic_perf: &[(f64, f64)]) -> Option<f64> {
     let total_w: f64 = topic_perf.iter().map(|(w, _)| w).sum();
     if total_w <= 0.0 {
@@ -308,14 +311,15 @@ pub(crate) fn weighted_ability(topic_perf: &[(f64, f64)]) -> Option<f64> {
     Some(topic_perf.iter().map(|(w, p)| w * p).sum::<f64>() / total_w)
 }
 
-/// Linear equating of ability [0,1] -> scaled [min, max] (GRE 200-990 by default).
+/// Linear equating of ability [0,1] -> scaled [min, max] (GRE 200-990 by
+/// default).
 pub(crate) fn equate_linear(ability: f64, min_scaled: f64, max_scaled: f64) -> f64 {
     min_scaled + ability.clamp(0.0, 1.0) * (max_scaled - min_scaled)
 }
 
 /// Conformal-style half-margin (scaled points) that widens as attempts shrink:
-/// `base * (1 + k/(n+1))`. n=0 => base*(1+k) (very uncertain); large n => ~base.
-/// Deterministic — no calibration set needed for the flat model.
+/// `base * (1 + k/(n+1))`. n=0 => base*(1+k) (very uncertain); large n =>
+/// ~base. Deterministic — no calibration set needed for the flat model.
 pub(crate) fn conformal_margin(base: f64, k: f64, n: u32) -> f64 {
     base * (1.0 + k / (n as f64 + 1.0))
 }
@@ -514,7 +518,10 @@ mod test {
         // — they must be identical before and after the refactor.
         assert_eq!(t.cards_with_data, 2, "only the 2 memory-state cards count");
         assert_eq!(t.graded_reviews, 24, "all rated revlog rows counted");
-        assert!(!t.abstained, "24 graded reviews >= 20 with data => not abstained");
+        assert!(
+            !t.abstained,
+            "24 graded reviews >= 20 with data => not abstained"
+        );
         assert!(
             (0.0..=1.0).contains(&t.avg_recall),
             "avg_recall in [0,1]: {}",
@@ -550,9 +557,9 @@ mod test {
         // round-robin; topics alternate: 1,3,2,4.
         let weights = vec![("calc".into(), 0.9), ("linear_algebra".into(), 0.1)];
         let cards = vec![
-            (1, Some(0), 0.2), // calc  points=.72
-            (2, Some(0), 0.5), // calc  points=.45
-            (3, Some(1), 0.9), // la    points=.01
+            (1, Some(0), 0.2),  // calc  points=.72
+            (2, Some(0), 0.5),  // calc  points=.45
+            (3, Some(1), 0.9),  // la    points=.01
             (4, Some(1), 0.95), // la   points=.005
         ];
         assert_eq!(
@@ -604,7 +611,11 @@ mod test {
         let mut col = Collection::new();
         let nt = col.get_notetype_by_name("Basic")?.unwrap();
         let mut ids: Vec<(CardId, NoteId)> = Vec::new();
-        for (front, tag) in [("calc1", "calc"), ("calc2", "calc"), ("la1", "linear_algebra")] {
+        for (front, tag) in [
+            ("calc1", "calc"),
+            ("calc2", "calc"),
+            ("la1", "linear_algebra"),
+        ] {
             let mut note = nt.new_note();
             note.set_field(0, front)?;
             col.add_note(&mut note, DeckId(1))?;
@@ -649,7 +660,8 @@ mod test {
             .map(|(c, _)| col.storage.get_card(*c).unwrap().unwrap().due)
             .collect();
 
-        // (c) Full => topic interleave reorders [calc1, calc2, la1] -> [calc1, la1, calc2].
+        // (c) Full => topic interleave reorders [calc1, calc2, la1] -> [calc1, la1,
+        // calc2].
         col.set_config_json(
             "speedrun:review_interleave",
             &serde_json::json!({"mode": 0, "weights": [["calc", 0.9], ["linear_algebra", 0.1]]}),
@@ -668,13 +680,19 @@ mod test {
             .iter()
             .map(|(c, _)| col.storage.get_card(*c).unwrap().unwrap().due)
             .collect();
-        assert_eq!(due_before, due_after, "interleave must not mutate card state");
+        assert_eq!(
+            due_before, due_after,
+            "interleave must not mutate card state"
+        );
         Ok(())
     }
 
     #[test]
     fn weighted_ability_is_weighted_mean() {
-        assert_eq!(super::weighted_ability(&[(0.9, 1.0), (0.1, 0.0)]), Some(0.9));
+        assert_eq!(
+            super::weighted_ability(&[(0.9, 1.0), (0.1, 0.0)]),
+            Some(0.9)
+        );
         assert_eq!(super::weighted_ability(&[]), None);
     }
 
@@ -689,7 +707,10 @@ mod test {
     fn conformal_margin_widens_when_sparse() {
         let sparse = super::conformal_margin(40.0, 8.0, 0);
         let dense = super::conformal_margin(40.0, 8.0, 100);
-        assert!(sparse > dense, "sparse {sparse} should exceed dense {dense}");
+        assert!(
+            sparse > dense,
+            "sparse {sparse} should exceed dense {dense}"
+        );
         assert!((dense - 40.0 * (1.0 + 8.0 / 101.0)).abs() < 1e-9);
     }
 
@@ -739,7 +760,12 @@ mod test {
         col.add_note(&mut note, DeckId(1)).unwrap();
         note.tags = vec![topic.into(), "Speedrun::Problem".into()];
         col.update_note(&mut note).unwrap();
-        col.storage.all_cards_of_note(note.id).unwrap().pop().unwrap().id
+        col.storage
+            .all_cards_of_note(note.id)
+            .unwrap()
+            .pop()
+            .unwrap()
+            .id
     }
 
     #[test]
@@ -765,12 +791,14 @@ mod test {
         let pcid = add_problem_card(&mut col, topic, "prob");
         add_problem_attempts(&mut col, pcid, 5, 10, 9);
 
-        let resp = col.get_performance_readiness(
-            anki_proto::speedrun::GetPerformanceReadinessRequest {
+        let resp =
+            col.get_performance_readiness(anki_proto::speedrun::GetPerformanceReadinessRequest {
                 topics: vec![topic.into()],
-            },
-        )?;
-        assert!(!resp.scaffolding, "a real Performance number => not scaffolding");
+            })?;
+        assert!(
+            !resp.scaffolding,
+            "a real Performance number => not scaffolding"
+        );
         let t = &resp.topics[0];
         let perf = t.performance.as_ref().unwrap();
         assert!(!perf.abstained, "10 attempts >= min 5 => scored");
@@ -788,11 +816,10 @@ mod test {
         let mut col = Collection::new();
         let pcid = add_problem_card(&mut col, topic, "prob");
         add_problem_attempts(&mut col, pcid, 5, 3, 3); // only 3 attempts (< 5)
-        let resp = col.get_performance_readiness(
-            anki_proto::speedrun::GetPerformanceReadinessRequest {
+        let resp =
+            col.get_performance_readiness(anki_proto::speedrun::GetPerformanceReadinessRequest {
                 topics: vec![topic.into()],
-            },
-        )?;
+            })?;
         assert!(resp.topics[0].performance.as_ref().unwrap().abstained);
         assert!(resp.scaffolding, "nothing scored => still scaffolding");
         Ok(())
@@ -804,16 +831,17 @@ mod test {
         let mut col = Collection::new();
         let pcid = add_problem_card(&mut col, topic, "prob");
         add_problem_attempts(&mut col, pcid, 5, 10, 9); // 10 attempts, ALL on day 5
-        let resp = col.get_performance_readiness(
-            anki_proto::speedrun::GetPerformanceReadinessRequest {
+        let resp =
+            col.get_performance_readiness(anki_proto::speedrun::GetPerformanceReadinessRequest {
                 topics: vec![topic.into()],
-            },
-        )?;
+            })?;
         let overall = resp.overall_readiness.as_ref().unwrap();
         assert!(overall.abstained, "1 mini-mock (< 2) => readiness locked");
         assert!(!resp.abstain_reason.is_empty());
         assert!(
-            resp.unlock_requirements.iter().any(|u| u.kind == "mini_mocks"),
+            resp.unlock_requirements
+                .iter()
+                .any(|u| u.kind == "mini_mocks"),
             "unlock must name the missing mini-mocks"
         );
         Ok(())
@@ -827,11 +855,10 @@ mod test {
         // 2 mini-mocks: 5 attempts on day 5 + 5 on day 6 (each >= mini_mock_min 5).
         add_problem_attempts(&mut col, pcid, 5, 5, 5);
         add_problem_attempts(&mut col, pcid, 6, 5, 4);
-        let resp = col.get_performance_readiness(
-            anki_proto::speedrun::GetPerformanceReadinessRequest {
+        let resp =
+            col.get_performance_readiness(anki_proto::speedrun::GetPerformanceReadinessRequest {
                 topics: vec![topic.into()],
-            },
-        )?;
+            })?;
         let overall = resp.overall_readiness.as_ref().unwrap();
         assert!(
             !overall.abstained,
@@ -958,10 +985,17 @@ mod test {
 
         let a = build_and_reorder()?;
         let b = build_and_reorder()?;
-        assert_eq!(a, b, "Full reorder must be deterministic across identical builds");
+        assert_eq!(
+            a, b,
+            "Full reorder must be deterministic across identical builds"
+        );
         // calc (weight .9) interleaved before linear_algebra (.1), within-topic
         // insertion order preserved => positions: c1=1,c2=3,c3=5, la1=2,la2=4.
-        assert_eq!(a, vec![1, 3, 5, 2, 4], "expected weighted round-robin order");
+        assert_eq!(
+            a,
+            vec![1, 3, 5, 2, 4],
+            "expected weighted round-robin order"
+        );
         Ok(())
     }
 

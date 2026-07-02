@@ -132,9 +132,11 @@ message PerformanceReadinessResponse {
   // score abstains (no data yet). Kept for back-compat with the scaffolding UI.
   bool scaffolding = 1;
   repeated TopicScaffold topics = 2;
-  // Overall exam readiness (200-990 scale; abstains until the give-up rule met).
+  // Overall exam readiness (200-990 scale; abstains until the give-up rule
+  // met).
   ScoreScaffold overall_readiness = 3;
-  // APPEND-ONLY. Human-readable reason the overall score abstains ("" if scored).
+  // APPEND-ONLY. Human-readable reason the overall score abstains ("" if
+  // scored).
   string abstain_reason = 4;
   // APPEND-ONLY. Concrete actions to unlock the overall readiness score.
   repeated UnlockRequirement unlock_requirements = 5;
@@ -145,8 +147,8 @@ message TopicScaffold {
   ScoreScaffold performance = 2;
   ScoreScaffold readiness = 3;
   // APPEND-ONLY. §7d gap meter: declarative recall - problem accuracy for this
-  // topic (0.0 when either side abstains). Positive => knows facts but can't yet
-  // apply them on problems.
+  // topic (0.0 when either side abstains). Positive => knows facts but can't
+  // yet apply them on problems.
   double gap_delta = 4;
 }
 

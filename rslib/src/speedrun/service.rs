@@ -309,7 +309,8 @@ impl crate::services::SpeedrunService for Collection {
             });
         }
 
-        // ---- Overall readiness: flat IRT ability -> 200-990 + conformal + give-up ----
+        // ---- Overall readiness: flat IRT ability -> 200-990 + conformal + give-up
+        // ----
         let mini_mocks = self.mini_mock_count(cfg.readiness.mini_mock_min_items)?;
         let coverage_frac = if total == 0 {
             0.0
@@ -460,11 +461,11 @@ impl Collection {
     }
 
     /// Count "timed mini-mocks": distinct epoch-days with >= `min_items` graded
-    /// problem attempts (a proxy until Phase 3's real session mechanic). Read-only.
+    /// problem attempts (a proxy until Phase 3's real session mechanic).
+    /// Read-only.
     fn mini_mock_count(&mut self, min_items: u32) -> error::Result<u32> {
         use std::collections::HashMap;
-        let guard =
-            self.search_cards_into_table("\"tag:Speedrun::Problem\"", SortMode::NoOrder)?;
+        let guard = self.search_cards_into_table("\"tag:Speedrun::Problem\"", SortMode::NoOrder)?;
         let revlog = guard.col.storage.get_revlog_entries_for_searched_cards()?;
         drop(guard);
         let mut per_day: HashMap<i64, u32> = HashMap::new();
