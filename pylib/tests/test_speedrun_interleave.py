@@ -12,8 +12,7 @@ same-topic). This is the "+1 Python integration" acceptance for the engine chang
 
 from __future__ import annotations
 
-from anki.consts import CARD_TYPE_REV
-from anki.consts import QUEUE_TYPE_REV
+from anki.consts import CARD_TYPE_REV, QUEUE_TYPE_REV
 from tests.shared import getEmptyCol
 
 
