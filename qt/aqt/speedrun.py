@@ -77,29 +77,27 @@ class SpeedrunHome(QDialog):
         # nothing due), tell the user why IN our page via an honest banner —
         # never leave them at the bare Anki "Congratulations" deck-browser
         # dead-end that "overview" produces on a fresh/empty collection.
-        did = self.mw.col.decks.id_for_name(self.EXAM_DECK)
-        if did is None:
+        # The decision (which relies on the SCHEDULER's due counts, not the
+        # count-less structural deck tree) lives in speedrun_logic so it can be
+        # unit-tested without Qt; see qt/tests/test_speedrun.py.
+        from aqt.speedrun_logic import decide_start_run
+
+        decision = decide_start_run(self.mw.col, self.EXAM_DECK)
+        if decision.status == "importNeeded":
             self.web.eval(
                 "window.speedrunStartStatus"
                 ' && window.speedrunStartStatus("importNeeded");'
             )
-            return
-        node = self.mw.col.decks.find_deck_in_tree(self.mw.col.decks.deck_tree(), did)
-        due = (
-            0
-            if node is None
-            else (node.new_count + node.review_count + node.learn_count)
-        )
-        if due == 0:
-            new_left = 0 if node is None else node.new_count
+        elif decision.status == "caughtUp":
             self.web.eval(
                 "window.speedrunStartStatus"
-                f' && window.speedrunStartStatus("caughtUp", {int(new_left)});'
+                f' && window.speedrunStartStatus("caughtUp", {int(decision.new_left)});'
             )
-            return
-        self.mw.col.decks.select(did)
-        self.close()
-        self.mw.moveToState("review")
+        else:  # "ready" — cards are due; launch the reviewer on the exam deck.
+            assert decision.deck_id is not None
+            self.mw.col.decks.select(decision.deck_id)
+            self.close()
+            self.mw.moveToState("review")
 
     def _import_deck(self) -> None:
         # Open Anki's generic File>Import dialog (prompt_for_file_then_import).
