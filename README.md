@@ -1,3 +1,8 @@
+<!-- SPEEDRUN FORK NOTE -->
+> **This is a fork used by the Speedrun project** — an honest GRE Mathematics Subject Test trainer built **on Anki** (desktop + Android sharing one Rust engine). The Speedrun engine change lives in **`rslib/src/speedrun/`** and `proto/anki/speedrun.proto`; the desktop UI is in `ts/routes/speedrun-*` (Svelte) + `qt/aqt/speedrun.py`. Project hub (docs, run steps, plan): `spinkicks/speedrun`. All credit for the underlying engine goes to Anki; the original Anki README follows.
+
+---
+
 # Anki
 
 [![Build Status](https://github.com/ankitects/anki/actions/workflows/ci.yml/badge.svg)](https://github.com/ankitects/anki/actions/workflows/ci.yml)
