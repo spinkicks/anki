@@ -166,3 +166,38 @@ def test_build_mini_mock_deck() -> None:
         assert 0 < len(held) <= 2
     finally:
         col.close()
+
+
+def test_build_mini_mock_deck_reuses_existing_no_orphans() -> None:
+    # Regression: building the mini-mock deck twice must reuse the SAME filtered
+    # deck (resolve-by-name then update in place), not create a second deck that
+    # Anki auto-suffixes ("Speedrun Mini-Mock+", "++", …) and orphans, stranding
+    # cards. After two builds exactly ONE "Speedrun Mini-Mock*" deck may exist.
+    col = _empty_col()
+    try:
+        deck_id = col.decks.id(PROBLEM_DECK)
+        assert deck_id is not None
+        for _ in range(3):
+            _add_problem_card(col, deck_id)
+
+        first = build_mini_mock_deck(col, PROBLEM_DECK, 2)
+        second = build_mini_mock_deck(col, PROBLEM_DECK, 2)
+        # Same deck reused, not a fresh suffixed one.
+        assert first == second
+
+        mock_decks = [
+            d
+            for d in col.decks.all_names_and_ids()
+            if d.name.startswith(MINI_MOCK_DECK)
+        ]
+        assert len(mock_decks) == 1, (
+            "exactly one Mini-Mock deck (no '+'/'++' orphans), "
+            f"got {[d.name for d in mock_decks]}"
+        )
+        assert mock_decks[0].name == MINI_MOCK_DECK
+
+        # Still a filtered deck with reschedule=True after the in-place update.
+        deck = col.sched.get_or_create_filtered_deck(DeckId(mock_decks[0].id))
+        assert deck.config.reschedule is True
+    finally:
+        col.close()

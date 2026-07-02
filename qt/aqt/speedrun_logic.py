@@ -102,8 +102,16 @@ def build_mini_mock_deck(col: Collection, problems_deck_name: str, size: int) ->
     """
     from anki.decks import DeckId, FilteredDeckConfig
 
-    deck = col.sched.get_or_create_filtered_deck(deck_id=DeckId(0))  # 0 => create
-    deck.name = "Speedrun Mini-Mock"
+    name = "Speedrun Mini-Mock"
+    # Resolve an EXISTING mini-mock filtered deck by name and UPDATE it in place;
+    # only create (deck_id=0) when none exists. Always passing DeckId(0) made Anki
+    # create a fresh filtered deck each launch, auto-suffixing the name ("+", "++",
+    # …) and orphaning prior decks (stranding their cards).
+    existing = col.decks.id_for_name(name)
+    deck = col.sched.get_or_create_filtered_deck(
+        deck_id=existing if existing is not None else DeckId(0)
+    )
+    deck.name = name
     config = deck.config
     config.reschedule = True  # see docstring: mock attempts must score
     del config.search_terms[:]

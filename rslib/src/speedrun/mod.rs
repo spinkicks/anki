@@ -59,6 +59,27 @@ pub(crate) fn wilson_interval(successes: u32, n: u32, z: f64) -> (f64, f64) {
     ((center - margin).max(0.0), (center + margin).min(1.0))
 }
 
+/// Normal-approximation 95% confidence interval AROUND the MEAN of `values`
+/// (each in [0, 1]) at the given z. Returns (lower, upper) clamped to [0, 1].
+/// This is a CI on the mean itself (so the plotted point — the mean — always
+/// lies inside the band), NOT a Wilson CI on a proportion. `n < 2` => (0.0,
+/// 1.0) (full uncertainty; can't estimate a variance from < 2 samples), which
+/// the caller treats as an abstain-like "no band" signal.
+pub(crate) fn mean_ci(values: &[f64], z: f64) -> (f64, f64) {
+    let n = values.len();
+    if n < 2 {
+        return (0.0, 1.0);
+    }
+    let n_f = n as f64;
+    let mean = values.iter().sum::<f64>() / n_f;
+    let sample_var = values.iter().map(|v| (v - mean).powi(2)).sum::<f64>() / (n_f - 1.0);
+    let se = (sample_var / n_f).sqrt();
+    (
+        (mean - z * se).clamp(0.0, 1.0),
+        (mean + z * se).clamp(0.0, 1.0),
+    )
+}
+
 /// Given new-card note-ids each paired with their topic index (or None if the
 /// card matches no weighted topic), and topic indices sorted by descending
 /// points-at-stake, return the note-ids in interleaved order: round-robin
@@ -329,6 +350,7 @@ mod test {
     use super::coverage;
     use super::interleave_by_topic;
     use super::interleave_reviews_by_weakness;
+    use super::mean_ci;
     use super::topic_aggregate;
     use super::topic_index_for_tags;
     use super::wilson_interval;
@@ -410,6 +432,39 @@ mod test {
     #[test]
     fn wilson_zero_n_is_full_uncertainty() {
         assert_eq!(wilson_interval(0, 0, 1.96), (0.0, 1.0));
+    }
+
+    #[test]
+    fn mean_ci_point_lies_within_band() {
+        // The mean (the plotted point) must always fall inside [lo, hi].
+        let values = vec![0.8_f64, 0.9, 0.7, 0.85];
+        let mean = values.iter().sum::<f64>() / values.len() as f64;
+        let (lo, hi) = mean_ci(&values, 1.96);
+        assert!(lo <= mean && mean <= hi, "mean {mean} not in [{lo}, {hi}]");
+        assert!((0.0..=1.0).contains(&lo) && (0.0..=1.0).contains(&hi));
+        assert!(lo < hi);
+    }
+
+    #[test]
+    fn mean_ci_narrows_as_n_grows_for_same_mean() {
+        // Same spread pattern, more samples => tighter CI (se ~ 1/sqrt(n)).
+        let small = vec![0.6_f64, 0.8];
+        let large = vec![0.6_f64, 0.8, 0.6, 0.8, 0.6, 0.8, 0.6, 0.8];
+        // Both have mean 0.7.
+        let (lo_s, hi_s) = mean_ci(&small, 1.96);
+        let (lo_l, hi_l) = mean_ci(&large, 1.96);
+        assert!(
+            (hi_l - lo_l) < (hi_s - lo_s),
+            "larger n should narrow: small width {} vs large width {}",
+            hi_s - lo_s,
+            hi_l - lo_l
+        );
+    }
+
+    #[test]
+    fn mean_ci_fewer_than_two_is_full_uncertainty() {
+        assert_eq!(mean_ci(&[], 1.96), (0.0, 1.0));
+        assert_eq!(mean_ci(&[0.9], 1.96), (0.0, 1.0));
     }
 
     #[test]
@@ -528,6 +583,81 @@ mod test {
             t.avg_recall
         );
         assert!(t.mastered_count <= t.cards_with_data);
+        Ok(())
+    }
+
+    #[test]
+    fn topic_mastery_excludes_problem_cards() -> Result<()> {
+        // A topic with BOTH declarative cards and Speedrun::Problem cards: Memory
+        // mastery is a DECLARATIVE-only signal, so the problem cards must NOT feed
+        // cards_with_data / mastered_count / graded_reviews (regression for the
+        // missing `-"tag:Speedrun::Problem"` exclusion in get_topic_mastery).
+        use crate::card::FsrsMemoryState;
+        use crate::revlog::RevlogEntry;
+        use crate::revlog::RevlogId;
+
+        let topic = "calc::integration";
+        let mut col = Collection::new();
+        let nt = col.get_notetype_by_name("Basic")?.unwrap();
+
+        // Helper: add a card under `topic` with the given extra tags, a memory
+        // state, and `reviews` graded revlog rows. Returns nothing; ids are local.
+        let mut rid = 10_000i64;
+        let mut add_card =
+            |col: &mut Collection, extra_tags: &[&str], reviews: u32| -> Result<()> {
+                let mut note = nt.new_note();
+                note.set_field(0, format!("q{rid}"))?;
+                col.add_note(&mut note, DeckId(1))?;
+                let mut tags = vec![topic.to_string()];
+                tags.extend(extra_tags.iter().map(|s| s.to_string()));
+                note.tags = tags;
+                col.update_note(&mut note)?;
+                let cid = col.storage.all_cards_of_note(note.id)?.pop().unwrap().id;
+                let mut card = col.storage.get_card(cid)?.unwrap();
+                card.memory_state = Some(FsrsMemoryState {
+                    stability: 1000.0,
+                    difficulty: 5.0,
+                });
+                col.storage.update_card(&card)?;
+                for _ in 0..reviews {
+                    col.storage.add_revlog_entry(
+                        &RevlogEntry {
+                            id: RevlogId(rid),
+                            cid,
+                            button_chosen: 3,
+                            ..Default::default()
+                        },
+                        false,
+                    )?;
+                    rid += 1;
+                }
+                Ok(())
+            };
+
+        // 2 declarative cards (12 graded reviews each = 24) + 1 problem card
+        // (also with memory state + 12 graded reviews) under the SAME topic.
+        add_card(&mut col, &[], 12)?;
+        add_card(&mut col, &[], 12)?;
+        add_card(&mut col, &["Speedrun::Problem"], 12)?;
+
+        let resp = col.get_topic_mastery(anki_proto::speedrun::GetTopicMasteryRequest {
+            topics: strs(&[topic]),
+            mastery_threshold: 0.0, // => default 0.9
+            min_reviews: 0,         // => default 20
+        })?;
+        let t = &resp.topics[0];
+        assert_eq!(
+            t.cards_with_data, 2,
+            "only the 2 declarative cards count (problem card excluded)"
+        );
+        assert_eq!(
+            t.graded_reviews, 24,
+            "only the 24 declarative reviews count (problem reviews excluded)"
+        );
+        assert!(
+            t.mastered_count <= 2,
+            "mastered_count is over declarative cards only"
+        );
         Ok(())
     }
 
@@ -875,6 +1005,68 @@ mod test {
             overall.point
         );
         assert!(overall.lower <= overall.point && overall.point <= overall.upper);
+        // FIX 2: percentile abstains (no ETS norm table) — never a fabricated number.
+        assert_eq!(
+            overall.percentile, 0.0,
+            "readiness percentile abstains (no ETS norm table)"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn readiness_coverage_is_problem_based_not_declarative() -> Result<()> {
+        // Regression for FIX 3: coverage must count only topics with enough timed
+        // PROBLEM attempts, not declarative flashcard study. Two topics:
+        //  - covered_topic: a problem card with 10 attempts (>= min 5)  => covered
+        //  - decl_topic:    only a declarative card w/ memory state (attempts=0) => NOT
+        //    covered, even though it has recall data.
+        // => coverage 1/2 = 0.5 < min_coverage 0.6, so readiness stays locked with
+        // a "coverage" unlock requirement.
+        use crate::card::FsrsMemoryState;
+        let covered_topic = "calc::single_var::integration";
+        let decl_topic = "linear_algebra::eigen";
+        let mut col = Collection::new();
+
+        // decl_topic: declarative card with a memory state, NO problem attempts.
+        let nt = col.get_notetype_by_name("Basic")?.unwrap();
+        let mut d = nt.new_note();
+        d.set_field(0, "decl")?;
+        col.add_note(&mut d, DeckId(1))?;
+        d.tags = vec![decl_topic.into()];
+        col.update_note(&mut d)?;
+        let dcid = col.storage.all_cards_of_note(d.id)?.pop().unwrap().id;
+        let mut dc = col.storage.get_card(dcid)?.unwrap();
+        dc.memory_state = Some(FsrsMemoryState {
+            stability: 1000.0,
+            difficulty: 5.0,
+        });
+        col.storage.update_card(&dc)?;
+
+        // covered_topic: a problem card with 2 mini-mocks worth of attempts so the
+        // ONLY thing that could keep readiness locked is coverage.
+        let pcid = add_problem_card(&mut col, covered_topic, "prob");
+        add_problem_attempts(&mut col, pcid, 5, 5, 5);
+        add_problem_attempts(&mut col, pcid, 6, 5, 4);
+
+        let resp =
+            col.get_performance_readiness(anki_proto::speedrun::GetPerformanceReadinessRequest {
+                topics: vec![covered_topic.into(), decl_topic.into()],
+            })?;
+        let overall = resp.overall_readiness.as_ref().unwrap();
+        assert!(
+            overall.abstained,
+            "coverage 1/2 (declarative topic doesn't count) < 0.6 => locked"
+        );
+        let cov = resp
+            .unlock_requirements
+            .iter()
+            .find(|u| u.kind == "coverage")
+            .expect("a coverage unlock requirement must be present");
+        assert!(
+            (cov.have - 0.5).abs() < 1e-9,
+            "coverage counts only the problem topic: have={}",
+            cov.have
+        );
         Ok(())
     }
 
