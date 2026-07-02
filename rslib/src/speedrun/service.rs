@@ -106,8 +106,8 @@ impl crate::services::SpeedrunService for Collection {
         &mut self,
         input: anki_proto::speedrun::GetTopicMasteryRequest,
     ) -> error::Result<anki_proto::speedrun::TopicMasteryResponse> {
+        use crate::speedrun::mean_ci;
         use crate::speedrun::topic_aggregate;
-        use crate::speedrun::wilson_interval;
         use crate::speedrun::MASTERY_THRESHOLD_DEFAULT;
         use crate::speedrun::MIN_REVIEWS_DEFAULT;
         use crate::speedrun::WILSON_Z_95;
@@ -128,8 +128,12 @@ impl crate::services::SpeedrunService for Collection {
 
         let mut out = Vec::with_capacity(input.topics.len());
         for topic in &input.topics {
-            // Cards tagged exactly `topic` OR any hierarchical descendant `topic::*`.
-            let search = format!("(\"tag:{topic}\" OR \"tag:{topic}::*\")");
+            // Cards tagged exactly `topic` OR any hierarchical descendant `topic::*`,
+            // EXCLUDING MCQ problem cards (mirror `topic_recall`): Memory mastery is
+            // a DECLARATIVE-only signal, so retrievabilities + graded_reviews must not
+            // be contaminated by Speedrun::Problem cards.
+            let search =
+                format!("(\"tag:{topic}\" OR \"tag:{topic}::*\") -\"tag:Speedrun::Problem\"");
             // Batch (was N+1): one search populates the `search_cids` table, then a
             // SINGLE card scan and a SINGLE revlog scan over that set — instead of
             // get_card + get_revlog_entries_for_card per card. Values are identical
@@ -157,8 +161,13 @@ impl crate::services::SpeedrunService for Collection {
 
             let (cards_with_data, mastered_count, avg_recall) =
                 topic_aggregate(&retrievabilities, threshold);
-            let (mastered_lower, mastered_upper) =
-                wilson_interval(mastered_count, cards_with_data, WILSON_Z_95);
+            // The UI plots `avg_recall` (mean FSRS retrievability) as the point of
+            // the Memory RANGE band, so the band must be a CI on that SAME quantity.
+            // Proto is frozen: the `mastered_lower`/`mastered_upper` field NAMES stay,
+            // but they now carry the 95% CI AROUND the recall mean (single consumer is
+            // the Memory RANGE band) instead of a Wilson CI on the mastered proportion.
+            // `mastered_count`/`cards_with_data` remain the raw DATA-column counts.
+            let (mastered_lower, mastered_upper) = mean_ci(&retrievabilities, WILSON_Z_95);
             let abstained = graded_reviews < min_reviews || cards_with_data == 0;
 
             out.push(anki_proto::speedrun::TopicMastery {
@@ -266,7 +275,12 @@ impl crate::services::SpeedrunService for Collection {
             let (attempts, correct, newest_ms) = self.topic_problem_stats(topic)?;
             total_attempts += attempts;
             overall_newest_secs = overall_newest_secs.max(newest_ms / 1000);
-            if recall_n > 0 || attempts > 0 {
+            // Coverage must be PROBLEM-based (PRD): a topic only counts once it has
+            // enough timed problem attempts to yield a real Performance number. Using
+            // the same threshold as the Performance block below so "covered" ==
+            // "has a Performance score". Declarative flashcard study alone (recall_n)
+            // does NOT count — memory != timed problem-solving.
+            if attempts >= cfg.performance.min_problem_attempts {
                 covered += 1;
             }
             let weight = weights.get(topic).copied().unwrap_or(0.0);
@@ -378,9 +392,11 @@ impl crate::services::SpeedrunService for Collection {
                         lower: lo,
                         upper: hi,
                         abstained: false,
-                        // Placeholder percentile (linear on ability) until a real
-                        // ETS norm table is supplied via the exam-profile config.
-                        percentile: a.clamp(0.0, 1.0) * 100.0,
+                        // Percentile ABSTAINS: there is no ETS norm table available,
+                        // and ability is not a percentile — emitting ability*100 here
+                        // would be a fabricated number. 0.0 signals "no percentile";
+                        // the UI does not display a %ile for readiness.
+                        percentile: 0.0,
                         scale: ScoreScale::Gre200990 as i32,
                         last_updated: overall_newest_secs,
                     },
