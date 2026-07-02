@@ -24,10 +24,11 @@ calmly. Reuses the frozen SpeedrunService RPCs via @speedrun/data.
 
     // Inline START RUN status banner. The Qt shell drives this via web.eval
     // (window.speedrunStartStatus) when it can't launch study: "importNeeded"
-    // (exam deck missing), "caughtUp" (nothing due; optional n = new cards
-    // that unlock next), or "mockFailed" (the timed mini-mock build found no
-    // eligible problems). Null = hidden. pycmd is injected by the Anki webview
-    // (not in the SvelteKit TS scope), so we cast when reaching for it.
+    // (exam/problem deck missing), "caughtUp" (nothing due; optional n = new
+    // cards that unlock next), "noActiveProblems" (problem bank imported but all
+    // suspended — unsuspend, don't import), or "mockFailed" (the timed mini-mock
+    // build found no eligible problems). Null = hidden. pycmd is injected by the
+    // Anki webview (not in the SvelteKit TS scope), so we cast when reaching for it.
     type StartStatus = { state: string; n?: number };
     let startStatus: StartStatus | null = null;
 
@@ -113,6 +114,18 @@ calmly. Reuses the frozen SpeedrunService RPCs via @speedrun/data.
                     >
                         Import deck
                     </button>
+                {:else if startStatus.state === "noActiveProblems"}
+                    <!-- Honest state: the GRE problem bank IS imported but every
+                         problem card is suspended, so a timed mini-mock has
+                         nothing to draw. Don't tell them to import (dishonest) —
+                         tell them to unsuspend. Informational only: there's no
+                         clean in-app unsuspend action from here, so no button
+                         (mirrors the mockFailed/caughtUp informational states;
+                         we do NOT invent a bridge command). -->
+                    <span class="startstatus-text">
+                        Your GRE problem bank is all suspended — unsuspend problems
+                        (Browse ▸ select ▸ Toggle Suspend) to run a timed mini-mock.
+                    </span>
                 {/if}
             </div>
             <button

@@ -133,6 +133,14 @@ class SpeedrunHome(QDialog):
                 "window.speedrunStartStatus"
                 ' && window.speedrunStartStatus("importNeeded");'
             )
+        elif decision.status == "noActiveProblems":
+            # Bank imported but every problem card is suspended: telling the user
+            # to import would be dishonest — the honest fix is to UNSUSPEND. Fire
+            # a distinct status so the page shows the unsuspend banner.
+            self.web.eval(
+                "window.speedrunStartStatus"
+                ' && window.speedrunStartStatus("noActiveProblems");'
+            )
         else:  # "ready" — build the filtered deck and launch the reviewer.
             # The build can still fail honestly (e.g. every matching problem card
             # got suspended between decide and build -> SearchReturnedNoCards).

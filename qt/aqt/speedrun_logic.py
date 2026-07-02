@@ -42,11 +42,15 @@ def clamp_mini_mock_size(size: int) -> int:
 
 
 class MiniMockDecision(NamedTuple):
-    # "importNeeded": Problems subdeck absent, or present but every problem card
-    #                 is suspended (nothing to mock) -> prompt import.
-    # "ready":        the subdeck has at least one non-suspended problem card ->
-    #                 build the filtered deck and launch the reviewer.
-    status: Literal["importNeeded", "ready"]
+    # "importNeeded":     Problems subdeck absent, or present but holding zero
+    #                     problem cards at all (bank not imported) -> prompt import.
+    # "noActiveProblems": subdeck present AND has problem cards, but every one is
+    #                     suspended (0 active) -> the mock search
+    #                     `deck:"…Problems" -is:suspended` returns nothing. Honest:
+    #                     tell the user to UNSUSPEND, not to import.
+    # "ready":            the subdeck has at least one non-suspended problem card
+    #                     -> build the filtered deck and launch the reviewer.
+    status: Literal["importNeeded", "noActiveProblems", "ready"]
     # Resolved Problems subdeck id; only set for "ready" (else None).
     deck_id: DeckId | None = None
 
@@ -83,10 +87,16 @@ def decide_start_run(col: Collection, exam_deck_name: str) -> StartRunDecision:
 def decide_mini_mock(col: Collection, problems_deck_name: str) -> MiniMockDecision:
     """Decide, honestly, whether a timed mini-mock can launch.
 
-    A mini-mock draws problems from the ``problems_deck_name`` subdeck. If that
-    subdeck doesn't exist yet (bank not imported) or holds zero *non-suspended*
-    cards, there's nothing to mock, so we report ``importNeeded`` and the caller
-    surfaces the same honest banner used by START RUN. Otherwise ``ready``.
+    A mini-mock draws problems from the ``problems_deck_name`` subdeck. Three
+    outcomes, kept distinct because they call for DIFFERENT user action:
+
+    * ``importNeeded`` — the subdeck doesn't exist yet, or exists but holds zero
+      problem cards at all: the bank hasn't been imported. Prompt import.
+    * ``noActiveProblems`` — the subdeck DOES hold problem cards, but every one
+      is suspended, so the mock search ``deck:"…Problems" -is:suspended`` returns
+      nothing. Telling this user to "import" is dishonest — they need to
+      UNSUSPEND. Reported separately so the caller can say so.
+    * ``ready`` — at least one non-suspended problem card exists; build + launch.
 
     Unlike START RUN, we don't gate on scheduler due counts here: a mock is a
     fresh timed pass over the whole problem bank, so mere presence of a
@@ -95,9 +105,14 @@ def decide_mini_mock(col: Collection, problems_deck_name: str) -> MiniMockDecisi
     deck_id = col.decks.id_for_name(problems_deck_name)
     if deck_id is None:
         return MiniMockDecision("importNeeded")
-    # find_cards over the subdeck excluding suspended cards; zero -> nothing to
-    # mock. Quote the deck name because it contains "::" and spaces.
+    # find_cards over the subdeck excluding suspended cards; zero active ->
+    # nothing to mock. Quote the deck name because it contains "::" and spaces.
     if not col.find_cards(f'deck:"{problems_deck_name}" -is:suspended'):
+        # Distinguish "no cards imported" from "all cards suspended": the former
+        # is an import problem, the latter an unsuspend problem. Include-suspended
+        # search over the same subdeck tells them apart.
+        if col.find_cards(f'deck:"{problems_deck_name}"'):
+            return MiniMockDecision("noActiveProblems")
         return MiniMockDecision("importNeeded")
     return MiniMockDecision("ready", deck_id=deck_id)
 

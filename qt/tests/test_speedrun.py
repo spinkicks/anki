@@ -135,6 +135,32 @@ def test_decide_mini_mock_ready() -> None:
         col.close()
 
 
+def test_decide_mini_mock_no_active_problems_when_all_suspended() -> None:
+    # P2 FIX B: the Problems subdeck is PRESENT and holds problem cards, but every
+    # one is suspended -> the mock search (deck:… -is:suspended) returns nothing.
+    # This must be reported as "noActiveProblems" (unsuspend, not import), NOT the
+    # dishonest "importNeeded" that used to conflate the two cases.
+    col = _empty_col()
+    try:
+        deck_id = col.decks.id(PROBLEM_DECK)
+        assert deck_id is not None
+        _add_problem_card(col, deck_id)
+        _add_problem_card(col, deck_id)
+        # Suspend every card in the subdeck.
+        cids = col.find_cards(f'deck:"{PROBLEM_DECK}"')
+        assert cids, "fixture must have created problem cards"
+        col.sched.suspend_cards(cids)
+        assert not col.find_cards(f'deck:"{PROBLEM_DECK}" -is:suspended')
+
+        decision = decide_mini_mock(col, PROBLEM_DECK)
+        assert decision.status == "noActiveProblems", (
+            f"expected noActiveProblems, got {decision}"
+        )
+        assert decision.deck_id is None
+    finally:
+        col.close()
+
+
 def test_build_mini_mock_deck() -> None:
     col = _empty_col()
     try:
