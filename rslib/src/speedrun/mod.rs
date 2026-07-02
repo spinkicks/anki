@@ -244,6 +244,76 @@ mod test {
     }
 
     #[test]
+    fn topic_mastery_scores_with_reviews_and_memory_state() -> Result<()> {
+        // Characterization guard for the batched get_topic_mastery: a topic with
+        // memory-state-bearing cards + enough graded reviews must report real
+        // counts (not abstain). Must hold identically before/after the N+1 batch
+        // refactor (values are what matter; the batch is a perf change).
+        use crate::card::FsrsMemoryState;
+        use crate::revlog::RevlogEntry;
+        use crate::revlog::RevlogId;
+
+        let mut col = Collection::new();
+        let nt = col.get_notetype_by_name("Basic")?.unwrap();
+        let mut cids = Vec::new();
+        for i in 0..3 {
+            let mut note = nt.new_note();
+            note.set_field(0, &format!("q{i}"))?;
+            col.add_note(&mut note, DeckId(1))?;
+            note.tags = vec!["calc::integration".into()];
+            col.update_note(&mut note)?;
+            let card = col.storage.all_cards_of_note(note.id)?.pop().unwrap();
+            cids.push(card.id);
+        }
+        // Give 2 of the 3 cards a high-retrievability memory state (=> mastered).
+        for &cid in &cids[..2] {
+            let mut card = col.storage.get_card(cid)?.unwrap();
+            card.memory_state = Some(FsrsMemoryState {
+                stability: 1000.0,
+                difficulty: 5.0,
+            });
+            col.storage.update_card(&card)?;
+        }
+        // 3 cards * 8 = 24 graded reviews (button_chosen 3) >= min_reviews 20.
+        let mut rid = 1_000i64;
+        for &cid in &cids {
+            for _ in 0..8 {
+                col.storage.add_revlog_entry(
+                    &RevlogEntry {
+                        id: RevlogId(rid),
+                        cid,
+                        button_chosen: 3,
+                        ..Default::default()
+                    },
+                    false,
+                )?;
+                rid += 1;
+            }
+        }
+
+        let resp = col.get_topic_mastery(anki_proto::speedrun::GetTopicMasteryRequest {
+            topics: strs(&["calc::integration"]),
+            mastery_threshold: 0.0, // => default 0.9
+            min_reviews: 0,         // => default 20
+        })?;
+        let t = &resp.topics[0];
+        // cards_with_data proves the card-scan read memory_state for exactly the
+        // 2 memory-state cards; graded_reviews proves the revlog-scan counted all
+        // 24 rated rows. These two are the exact observables the N+1 batch touches
+        // — they must be identical before and after the refactor.
+        assert_eq!(t.cards_with_data, 2, "only the 2 memory-state cards count");
+        assert_eq!(t.graded_reviews, 24, "all rated revlog rows counted");
+        assert!(!t.abstained, "24 graded reviews >= 20 with data => not abstained");
+        assert!(
+            (0.0..=1.0).contains(&t.avg_recall),
+            "avg_recall in [0,1]: {}",
+            t.avg_recall
+        );
+        assert!(t.mastered_count <= t.cards_with_data);
+        Ok(())
+    }
+
+    #[test]
     fn interleave_alternates_topics_no_two_adjacent_same() {
         let nt = vec![
             (10, Some(0)),
@@ -328,6 +398,51 @@ mod test {
             json.contains("calc"),
             "default must contain the calc topics"
         );
+        Ok(())
+    }
+
+    #[test]
+    fn reorder_new_full_is_deterministic() -> Result<()> {
+        // Contract: Full-mode reposition is a STABLE, repeatable permutation.
+        // Two identically-built collections must yield byte-identical new-card
+        // positions. Guards the ablation harness (3-build comparison is only
+        // meaningful if Full is deterministic). interleave_by_topic's stability
+        // is separately pinned by interleave_alternates_topics_no_two_adjacent_same.
+        use anki_proto::speedrun::AblationMode;
+
+        fn build_and_reorder() -> Result<Vec<i32>> {
+            let mut col = Collection::new();
+            let nt = col.get_notetype_by_name("Basic")?.unwrap();
+            for front in ["c1", "c2", "c3", "la1", "la2"] {
+                let tag = if front.starts_with('c') {
+                    "calc"
+                } else {
+                    "linear_algebra"
+                };
+                let mut note = nt.new_note();
+                note.set_field(0, front)?;
+                col.add_note(&mut note, DeckId(1))?;
+                note.tags = vec![tag.into()];
+                col.update_note(&mut note)?;
+            }
+            let weights = vec![
+                ("calc".to_string(), 0.9),
+                ("linear_algebra".to_string(), 0.1),
+            ];
+            col.speedrun_reorder_new(DeckId(1), weights, AblationMode::Full)?;
+            // Cards in insertion order (ids are monotonic within a fresh col);
+            // element i is the new position assigned to the i-th inserted card.
+            let mut cards = col.storage.get_all_cards();
+            cards.sort_by_key(|c| c.id);
+            Ok(cards.iter().map(|c| c.due).collect())
+        }
+
+        let a = build_and_reorder()?;
+        let b = build_and_reorder()?;
+        assert_eq!(a, b, "Full reorder must be deterministic across identical builds");
+        // calc (weight .9) interleaved before linear_algebra (.1), within-topic
+        // insertion order preserved => positions: c1=1,c2=3,c3=5, la1=2,la2=4.
+        assert_eq!(a, vec![1, 3, 5, 2, 4], "expected weighted round-robin order");
         Ok(())
     }
 

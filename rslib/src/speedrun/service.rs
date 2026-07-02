@@ -130,28 +130,30 @@ impl crate::services::SpeedrunService for Collection {
         for topic in &input.topics {
             // Cards tagged exactly `topic` OR any hierarchical descendant `topic::*`.
             let search = format!("(\"tag:{topic}\" OR \"tag:{topic}::*\")");
-            let cids = self.search_cards(search.as_str(), SortMode::NoOrder)?;
+            // Batch (was N+1): one search populates the `search_cids` table, then a
+            // SINGLE card scan and a SINGLE revlog scan over that set — instead of
+            // get_card + get_revlog_entries_for_card per card. Values are identical
+            // (guarded by topic_mastery_scores_with_reviews_and_memory_state).
+            let guard = self.search_cards_into_table(search.as_str(), SortMode::NoOrder)?;
 
             let mut retrievabilities: Vec<f64> = Vec::new();
-            let mut graded_reviews: u32 = 0;
-            for cid in cids {
-                let card = match self.storage.get_card(cid)? {
-                    Some(c) => c,
-                    None => continue,
-                };
+            guard.col.storage.for_each_card_in_search(|card| {
                 if let Some(state) = card.memory_state {
                     let elapsed = card.seconds_since_last_review(&timing).unwrap_or_default();
                     let decay = card.decay.unwrap_or(FSRS5_DEFAULT_DECAY);
                     let r = fsrs.current_retrievability_seconds(state.into(), elapsed, decay);
                     retrievabilities.push(r as f64);
                 }
-                graded_reviews += self
-                    .storage
-                    .get_revlog_entries_for_card(cid)?
-                    .iter()
-                    .filter(|e| e.has_rating_and_affects_scheduling())
-                    .count() as u32;
-            }
+                Ok(())
+            })?;
+            let graded_reviews = guard
+                .col
+                .storage
+                .get_revlog_entries_for_searched_cards()?
+                .iter()
+                .filter(|e| e.has_rating_and_affects_scheduling())
+                .count() as u32;
+            drop(guard);
 
             let (cards_with_data, mastered_count, avg_recall) =
                 topic_aggregate(&retrievabilities, threshold);
