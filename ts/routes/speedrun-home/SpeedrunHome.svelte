@@ -111,7 +111,12 @@ calmly. Reuses the frozen SpeedrunService RPCs via @speedrun/data.
         </div>
     {:else if view}
         <RunHeader timedReviewsTotal={view.timedReviewsTotal} />
-        <StatRow coverage={view.coverage} memoryVerified={view.memoryVerified} />
+        <StatRow
+            coverage={view.coverage}
+            memoryVerified={view.memoryVerified}
+            performance={view.performance}
+            readiness={view.readiness}
+        />
         <Splits segments={view.segments} />
         <ActionBar weakestTimed={view.weakestTimed} />
         <div class="foot">

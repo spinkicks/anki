@@ -7,13 +7,24 @@ License: GNU AGPL, version 3 or later; http://www.gnu.org/licenses/agpl.html
     import RangeBand from "./RangeBand.svelte";
 
     export let row: Row;
-    // scaffold: future PERFORMANCE/READINESS model output; always abstaining today.
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    // scaffold: PERFORMANCE / READINESS model output. Each cell abstains until
+    // the engine has real data (abstained=false) — we never invent a number.
     export let scaffold: TopicScaffoldRow | undefined = undefined;
-    // Derive cell text from scaffold when real models land (abstained=false).
-    // For now every cell shows —.
-    $: perfCell = scaffold?.performance.abstained !== false ? "—" : "?";
-    $: readyCell = scaffold?.readiness.abstained !== false ? "—" : "?";
+
+    $: perf = scaffold?.performance;
+    $: ready = scaffold?.readiness;
+    // A cell renders a real band only when the engine marks it non-abstained.
+    $: perfReal = perf?.abstained === false;
+    $: readyReal = ready?.abstained === false;
+    // Tooltips surface the percentile when present (0 while abstaining).
+    $: perfTitle = perfReal && perf ? `Percentile ${Math.round(perf.percentile)}` : "";
+    $: readyTitle =
+        readyReal && ready ? `Percentile ${Math.round(ready.percentile)}` : "";
+
+    // §7d gap meter: declarative recall − problem accuracy. Only meaningful when
+    // Performance is real (both sides present); otherwise honest "—".
+    $: gap = scaffold?.gapDelta ?? 0;
+    $: gapText = perfReal ? `${gap >= 0 ? "+" : "−"}${Math.abs(gap).toFixed(2)}` : "—";
 </script>
 
 <tr class:abstained={row.abstained}>
@@ -29,18 +40,38 @@ License: GNU AGPL, version 3 or later; http://www.gnu.org/licenses/agpl.html
             </span>
             <span class="abstain-compact">🔒 {row.unlockN} more to unlock</span>
         </td>
-        <td class="data">{row.masteredCount}/{row.cardsWithData} cards</td>
-        <td class="scaffold c-perf">{perfCell}</td>
-        <td class="scaffold c-ready">{readyCell}</td>
     {:else}
         <td class="recall">{Math.round(row.avgRecall * 100)}%</td>
         <td class="range">
             <RangeBand lower={row.lower} upper={row.upper} point={row.avgRecall} />
         </td>
-        <td class="data">{row.masteredCount}/{row.cardsWithData} cards</td>
-        <td class="scaffold c-perf">{perfCell}</td>
-        <td class="scaffold c-ready">{readyCell}</td>
     {/if}
+    <td class="data">{row.masteredCount}/{row.cardsWithData} cards</td>
+    <td class="scaffold c-perf" title={perfTitle}>
+        {#if perfReal && perf}
+            <RangeBand
+                lower={perf.lower}
+                upper={perf.upper}
+                point={perf.point}
+                scale={perf.scale}
+            />
+        {:else}
+            —
+        {/if}
+    </td>
+    <td class="scaffold c-ready" title={readyTitle}>
+        {#if readyReal && ready}
+            <RangeBand
+                lower={ready.lower}
+                upper={ready.upper}
+                point={ready.point}
+                scale={ready.scale}
+            />
+        {:else}
+            —
+        {/if}
+    </td>
+    <td class="scaffold c-gap">{gapText}</td>
 </tr>
 
 <style>
@@ -93,7 +124,7 @@ License: GNU AGPL, version 3 or later; http://www.gnu.org/licenses/agpl.html
         text-transform: uppercase;
         letter-spacing: 0.06em;
     }
-    /* Two scaffold cells distinguished by added classes c-perf / c-ready */
+    /* Scaffold cells distinguished by added classes c-perf / c-ready / c-gap */
     .c-perf::before {
         content: "PERFORMANCE: ";
         font-size: 0.75em;
@@ -110,6 +141,14 @@ License: GNU AGPL, version 3 or later; http://www.gnu.org/licenses/agpl.html
         text-transform: uppercase;
         letter-spacing: 0.06em;
     }
+    .c-gap::before {
+        content: "GAP (Δ): ";
+        font-size: 0.75em;
+        font-weight: 600;
+        color: var(--muted);
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+    }
 
     /* Desktop restore: hide ::before labels at ≥768px */
     @media (min-width: 768px) {
@@ -118,7 +157,8 @@ License: GNU AGPL, version 3 or later; http://www.gnu.org/licenses/agpl.html
         .range::before,
         .data::before,
         .c-perf::before,
-        .c-ready::before {
+        .c-ready::before,
+        .c-gap::before {
             content: none;
         }
     }
