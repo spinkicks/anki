@@ -20,10 +20,23 @@ License: GNU AGPL, version 3 or later; http://www.gnu.org/licenses/agpl.html
         };
         (g.pycmd ?? g.bridgeCommand)?.("startrun");
     };
+
+    // Secondary action: launch a TIMED mini-mock over the Problems subdeck.
+    // Same single-dispatch rule as START RUN — fire exactly ONE bridge cmd
+    // (pycmd and bridgeCommand are aliased in the desktop webview, so firing
+    // both double-dispatches). No-op outside a webview (dev server / tests).
+    export let onMiniMock: () => void = () => {
+        const g = globalThis as {
+            pycmd?: (cmd: string) => void;
+            bridgeCommand?: (cmd: string) => void;
+        };
+        (g.pycmd ?? g.bridgeCommand)?.("minimock");
+    };
 </script>
 
 <div class="action">
     <button class="run" on:click={onStartRun}>► START RUN</button>
+    <button class="mock" on:click={onMiniMock}>MINI-MOCK</button>
     {#if weakestTimed}
         <div class="next">
             NEXT SEGMENT · <b>{weakestTimed}</b>
@@ -76,6 +89,36 @@ License: GNU AGPL, version 3 or later; http://www.gnu.org/licenses/agpl.html
         }
     }
     .run:focus-visible {
+        outline: 2px solid var(--fg);
+        outline-offset: 2px;
+    }
+    /* Secondary action: outlined/ghost so START RUN stays the primary CTA. */
+    .mock {
+        font-family: var(--mono);
+        font-weight: 600;
+        font-size: 14px;
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
+        background: transparent;
+        color: var(--fg);
+        border: 1px solid var(--line);
+        /* Mobile: full width, tall enough for 44px touch target */
+        width: 100%;
+        padding: 15px;
+        cursor: pointer;
+    }
+    .mock:hover {
+        border-color: var(--pace);
+        color: var(--pace);
+    }
+    /* Desktop restore: auto width, matched padding */
+    @media (min-width: 768px) {
+        .mock {
+            width: auto;
+            padding: 13px 22px;
+        }
+    }
+    .mock:focus-visible {
         outline: 2px solid var(--fg);
         outline-offset: 2px;
     }

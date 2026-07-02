@@ -60,6 +60,8 @@ class SpeedrunHome(QDialog):
 
     # The exam deck the run studies. Grounded fact: this is the seed deck name.
     EXAM_DECK = "Speedrun::GRE Math"
+    # The Problems subdeck a timed mini-mock draws from (seeded bank).
+    PROBLEM_DECK = "Speedrun::GRE Math::Problems"
 
     def _on_bridge_cmd(self, cmd: str) -> Any:
         if cmd == "startrun:import":
@@ -68,6 +70,8 @@ class SpeedrunHome(QDialog):
             self._custom_study()
         elif cmd == "startrun" or cmd.startswith("startrun:"):
             self._start_run()
+        elif cmd == "minimock":
+            self._start_mini_mock()
         elif cmd == "open:memory":
             aqt.dialogs.open("SpeedrunMemory", self.mw)
         return False
@@ -96,6 +100,33 @@ class SpeedrunHome(QDialog):
         else:  # "ready" — cards are due; launch the reviewer on the exam deck.
             assert decision.deck_id is not None
             self.mw.col.decks.select(decision.deck_id)
+            self.close()
+            self.mw.moveToState("review")
+
+    def _start_mini_mock(self) -> None:
+        # Launch a TIMED mini-mock: a filtered deck of random problems over the
+        # Problems subdeck. Per-answer wall-clock is captured automatically in
+        # revlog.taken_millis (no engine change). Size is config-driven
+        # (Decision 13 default 10; synced col config), never hard-coded here.
+        # The build sets reschedule=True so attempts feed Performance + the
+        # Readiness give-up counter (see build_mini_mock_deck's docstring for the
+        # is_cramming() exclusion this avoids). Decision logic is Qt-free and
+        # unit-tested in qt/tests/test_speedrun.py.
+        # Android note: Android gets the same problem bank via the seed .apkg and
+        # studies the Problems subdeck through its native reviewer; a bespoke
+        # Android timed mini-mock UI is DEFERRED this cycle (no anki-android code).
+        from aqt.speedrun_logic import build_mini_mock_deck, decide_mini_mock
+
+        size = int(self.mw.col.get_config("speedrun:mini_mock_size", 10))
+        decision = decide_mini_mock(self.mw.col, self.PROBLEM_DECK)
+        if decision.status == "importNeeded":
+            self.web.eval(
+                "window.speedrunStartStatus"
+                ' && window.speedrunStartStatus("importNeeded");'
+            )
+        else:  # "ready" — build the filtered deck and launch the reviewer.
+            did = build_mini_mock_deck(self.mw.col, self.PROBLEM_DECK, size)
+            self.mw.col.decks.select(did)
             self.close()
             self.mw.moveToState("review")
 

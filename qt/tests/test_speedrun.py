@@ -15,9 +15,15 @@ import tempfile
 
 from anki.collection import Collection
 from anki.decks import DeckId
-from aqt.speedrun_logic import decide_start_run
+from aqt.speedrun_logic import (
+    build_mini_mock_deck,
+    decide_mini_mock,
+    decide_start_run,
+)
 
 EXAM_DECK = "Speedrun::GRE Math"
+PROBLEM_DECK = "Speedrun::GRE Math::Problems"
+MINI_MOCK_DECK = "Speedrun Mini-Mock"
 
 
 def _empty_col() -> Collection:
@@ -34,6 +40,19 @@ def _add_new_card(col: Collection, deck_id: DeckId) -> None:
     note = col.new_note(notetype)
     note.fields[0] = "q"
     note.fields[1] = "a"
+    col.add_note(note, deck_id)
+
+
+def _add_problem_card(col: Collection, deck_id: DeckId) -> None:
+    # A "problem" for the mini-mock is just a normal note living in the Problems
+    # subdeck and tagged Speedrun::Problem (the real bank uses a dedicated
+    # notetype, but decide/build only care about deck membership + suspension,
+    # so a stock note in the right deck is a faithful fixture).
+    notetype = col.models.current()
+    note = col.new_note(notetype)
+    note.fields[0] = "q"
+    note.fields[1] = "a"
+    note.tags.append("Speedrun::Problem")
     col.add_note(note, deck_id)
 
 
@@ -87,5 +106,63 @@ def test_scheduler_tree_has_counts_but_structural_tree_does_not() -> None:
         assert structural is not None and scheduled is not None
         assert structural.new_count == 0  # the bug: structural tree has no counts
         assert scheduled.new_count == 1  # the fix: scheduler computes real counts
+    finally:
+        col.close()
+
+
+def test_decide_mini_mock_import_needed() -> None:
+    # No Problems subdeck at all -> the bank hasn't been imported yet.
+    col = _empty_col()
+    try:
+        decision = decide_mini_mock(col, PROBLEM_DECK)
+        assert decision.status == "importNeeded"
+    finally:
+        col.close()
+
+
+def test_decide_mini_mock_ready() -> None:
+    # Problems subdeck with a couple of non-suspended problem cards -> ready.
+    col = _empty_col()
+    try:
+        deck_id = col.decks.id(PROBLEM_DECK)
+        assert deck_id is not None
+        _add_problem_card(col, deck_id)
+        _add_problem_card(col, deck_id)
+        decision = decide_mini_mock(col, PROBLEM_DECK)
+        assert decision.status == "ready", f"expected ready, got {decision}"
+        assert decision.deck_id == deck_id
+    finally:
+        col.close()
+
+
+def test_build_mini_mock_deck() -> None:
+    col = _empty_col()
+    try:
+        deck_id = col.decks.id(PROBLEM_DECK)
+        assert deck_id is not None
+        for _ in range(3):
+            _add_problem_card(col, deck_id)
+
+        did = build_mini_mock_deck(col, PROBLEM_DECK, 2)
+        assert did
+
+        # The filtered deck must reschedule=True so mock attempts feed the
+        # engine's Performance score + the Readiness give-up counter (which both
+        # exclude is_cramming()/reschedule=false reviews).
+        deck = col.sched.get_or_create_filtered_deck(did)
+        assert deck.config.reschedule is True
+        assert len(deck.config.search_terms) == 1
+        term = deck.config.search_terms[0]
+        # The backend normalises quoting (it may re-quote a whole term that
+        # contains spaces), so assert on the semantic pieces, not exact quotes.
+        assert "deck:" in term.search
+        assert "Speedrun::GRE Math::Problems" in term.search
+        assert "-is:suspended" in term.search
+        assert term.limit == 2
+
+        # Only up to `size` problem cards get pulled into the filtered deck, and
+        # the search really targets the Problems deck (3 cards exist; limit=2).
+        held = col.find_cards(f'deck:"{MINI_MOCK_DECK}"')
+        assert 0 < len(held) <= 2
     finally:
         col.close()
