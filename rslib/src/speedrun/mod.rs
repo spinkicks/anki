@@ -125,9 +125,18 @@ pub(crate) fn mean_ci(values: &[f64], z: f64) -> (f64, f64) {
 /// Given new-card note-ids each paired with their topic index (or None if the
 /// card matches no weighted topic), and topic indices sorted by descending
 /// points-at-stake, return the note-ids in interleaved order: round-robin
-/// across topics in priority order, so no two adjacent cards share a topic when
-/// multiple topics have remaining cards. Unmatched cards (None) go last, in
-/// input order. Input order within a topic is preserved (stable).
+/// across topics in priority order.
+///
+/// BEST-EFFORT spread, NOT a hard guarantee. Each pass emits at most one card
+/// per topic, so same-topic cards are spread as far apart as the topic mix
+/// allows. This does NOT guarantee "no two same-topic cards are ever adjacent":
+/// when one topic DOMINATES (has more cards than all others combined), its
+/// surplus cards necessarily end up adjacent in the tail — that is the correct,
+/// maximally-spread result, not a bug. No-adjacency holds only while at least
+/// two topics still have cards remaining.
+///
+/// Unmatched cards (None) go last, in input order. Input order within a topic
+/// is preserved (stable).
 pub(crate) fn interleave_by_topic(
     ordered_topic_indices: &[usize],
     note_topic: &[(i64, Option<usize>)],
@@ -161,8 +170,19 @@ pub(crate) fn interleave_by_topic(
 }
 
 /// Match a topic tag set to the index of the highest-priority weighted topic a
-/// card belongs to (prefix rule: tag == topic or starts with "topic::").
-/// `weighted` is (topic, weight) already sorted by descending weight.
+/// card belongs to (prefix rule: a card belongs to weighted topic `T` iff it
+/// has a tag `== T` or a hierarchical descendant tag `T::...`).
+/// `weighted` is (topic, weight) already sorted by descending weight, so the
+/// FIRST match wins => the highest-priority topic when a card spans several.
+///
+/// Parent/container tags: a card tagged only with a container (e.g. `calc`, or
+/// an intermediate `calc::single_var` that is NOT itself a weighted key) matches
+/// the nearest ANCESTOR that IS a weighted topic — here `calc` — via the
+/// `T::` prefix branch. It does NOT get promoted to a more specific descendant
+/// leaf it lacks (there'd be no unambiguous choice, and the card genuinely has
+/// no leaf tag). If no weighted topic is an ancestor-or-self of any tag, the
+/// card belongs to NO topic (None) and the caller sends it to the unmatched
+/// tail — never to a wrong / arbitrary bucket.
 pub(crate) fn topic_index_for_tags(tags: &[String], weighted: &[(String, f64)]) -> Option<usize> {
     for (i, (topic, _)) in weighted.iter().enumerate() {
         let prefix = format!("{topic}::");
@@ -190,8 +210,9 @@ pub(crate) struct ReviewInterleaveConfig {
 /// Pure read-time ordering for the due REVIEW queue. Given review cards as
 /// `(card_id, topic_index, retrievability)` and exam-profile `weights`
 /// (topic, weight) SORTED BY DESCENDING WEIGHT, return the card_ids ordered by
-/// points-at-stake and interleaved by topic (no two adjacent same-topic when
-/// avoidable).
+/// points-at-stake and interleaved by topic. Same-topic spread is BEST-EFFORT
+/// (see `interleave_by_topic`): a dominant topic's surplus still trails
+/// adjacently in the tail — no hard no-adjacency guarantee.
 ///
 /// `points_at_stake = (1 - retrievability) * topic_weight` (weakness × weight).
 /// Topics run in descending aggregate points-at-stake; within a topic the
@@ -704,7 +725,10 @@ mod test {
     }
 
     #[test]
-    fn interleave_alternates_topics_no_two_adjacent_same() {
+    fn interleave_spreads_topics_round_robin() {
+        // Balanced-ish mix: round-robin spreads topics so same-topic cards are as
+        // far apart as the mix allows. Topic 0 has one surplus card (3 vs 2) so it
+        // trails at the end — the tail spread is best-effort, not magic.
         let nt = vec![
             (10, Some(0)),
             (11, Some(0)),
@@ -714,6 +738,34 @@ mod test {
         ];
         let out = interleave_by_topic(&[0, 1], &nt);
         assert_eq!(out, vec![10, 20, 11, 21, 12]);
+    }
+
+    #[test]
+    fn interleave_is_best_effort_not_hard_no_adjacency() {
+        // FIX 4 (honesty): interleave_by_topic does NOT guarantee "no two
+        // same-topic cards are ever adjacent". When one topic DOMINATES (more
+        // cards than all others combined), its surplus MUST land adjacent in the
+        // tail. Assert the real, maximally-spread output AND that same-topic
+        // adjacency genuinely occurs — so the contract stays honest.
+        let nt = vec![
+            (1, Some(0)),
+            (2, Some(0)),
+            (3, Some(0)),
+            (4, Some(0)),
+            (10, Some(1)),
+        ];
+        let out = interleave_by_topic(&[0, 1], &nt);
+        // Round-robin: 0,1 then 0 (topic 1 exhausted) then 0, 0. Topic 0's tail is
+        // adjacent to itself — expected best-effort spread, not a guarantee.
+        assert_eq!(out, vec![1, 10, 2, 3, 4]);
+        let topics: Vec<usize> = out
+            .iter()
+            .map(|nid| nt.iter().find(|(n, _)| n == nid).unwrap().1.unwrap())
+            .collect();
+        assert!(
+            topics.windows(2).any(|w| w[0] == w[1]),
+            "a dominant topic PRODUCES same-topic adjacency; no-adjacency is not guaranteed"
+        );
     }
 
     #[test]
@@ -844,7 +896,7 @@ mod test {
         assert_eq!(
             review.iter().map(|d| d.id).collect::<Vec<_>>(),
             vec![ids[0].0, ids[2].0, ids[1].0],
-            "Full interleaves topics (no two adjacent same-topic)"
+            "Full interleaves topics (best-effort spread; here fully alternates)"
         );
 
         // Order-only safety: card scheduling state is untouched by the reorder.
@@ -1272,6 +1324,95 @@ mod test {
     }
 
     #[test]
+    fn topic_index_parent_and_container_tags_map_correctly() {
+        // FIX 3: ground how PARENT/container tags map. After grounding the real
+        // GRE-math profile there is NO correctness defect here — the prefix rule
+        // already assigns container tags to the nearest weighted ancestor (or to
+        // None). These asserts LOCK that behavior so a future refactor can't
+        // silently regress it into a wrong index or an arbitrary 0-weight bucket.
+        //
+        // Weights sorted DESCENDING (as the callers sort them): leaves first,
+        // the weight-0 `calc` container LAST.
+        let weighted = vec![
+            ("calc::single_var::integration".into(), 0.16),
+            ("calc::single_var::differentiation".into(), 0.14),
+            ("calc::limits".into(), 0.10),
+            ("calc".into(), 0.0),
+        ];
+        let idx = |t: &str| topic_index_for_tags(&[t.into()], &weighted);
+
+        // Exact leaf tag => that leaf.
+        assert_eq!(idx("calc::single_var::integration"), Some(0));
+        // Descendant BELOW a leaf => still that leaf (deeper card tags roll up).
+        assert_eq!(idx("calc::single_var::integration::by_parts"), Some(0));
+        // Intermediate container `calc::single_var` is NOT a weighted key: it must
+        // map to its nearest weighted ANCESTOR `calc` (index 3), NOT to a leaf it
+        // never carries. This is the exact "parent tag" case from the ticket — it
+        // lands in `calc` (the true ancestor), not a wrong leaf bucket.
+        assert_eq!(
+            idx("calc::single_var"),
+            Some(3),
+            "intermediate container maps to nearest weighted ancestor (calc), not a leaf"
+        );
+        // Top container tag `calc` => the `calc` bucket itself (index 3).
+        assert_eq!(idx("calc"), Some(3));
+        // A card with no ancestor-or-self among weighted topics => None (unmatched
+        // tail), never a wrong bucket. Substring is NOT a prefix match.
+        assert_eq!(idx("calculus_tricks"), None);
+        assert_eq!(idx("probability"), None);
+    }
+
+    #[test]
+    fn topic_index_no_container_key_parent_tag_is_none() {
+        // Complement to the above: when the container is NOT itself a weighted
+        // topic, a card tagged ONLY with that container (or an intermediate under
+        // it) belongs to NO weighted topic => None. Here `calc` is absent from the
+        // weights, so `calc::single_var` has no weighted ancestor-or-self.
+        let weighted = vec![
+            ("calc::single_var::integration".into(), 0.16),
+            ("calc::limits".into(), 0.10),
+        ];
+        let idx = |t: &str| topic_index_for_tags(&[t.into()], &weighted);
+        // No weighted ancestor => unmatched (None), NOT a 0-weight fallback.
+        assert_eq!(idx("calc"), None);
+        assert_eq!(idx("calc::single_var"), None);
+        // A real leaf still matches.
+        assert_eq!(idx("calc::limits"), Some(1));
+    }
+
+    #[test]
+    fn topic_index_priority_picks_highest_weight_when_card_spans_topics() {
+        // Priority semantics lock: a card carrying tags for BOTH a high- and a
+        // low-weight topic must map to the HIGHER-weight one (first in the
+        // descending-sorted list), independent of tag ordering on the card.
+        let weighted = vec![
+            ("calc::single_var::integration".into(), 0.16),
+            ("calc::limits".into(), 0.10),
+        ];
+        assert_eq!(
+            topic_index_for_tags(
+                &[
+                    "calc::limits".into(),
+                    "calc::single_var::integration".into()
+                ],
+                &weighted
+            ),
+            Some(0),
+            "highest-weight topic wins regardless of tag order"
+        );
+        assert_eq!(
+            topic_index_for_tags(
+                &[
+                    "calc::single_var::integration".into(),
+                    "calc::limits".into()
+                ],
+                &weighted
+            ),
+            Some(0)
+        );
+    }
+
+    #[test]
     fn reorder_new_full_interleaves_and_is_undo_safe() -> Result<()> {
         use anki_proto::speedrun::AblationMode;
         let mut col = Collection::new();
@@ -1332,7 +1473,7 @@ mod test {
         // Two identically-built collections must yield byte-identical new-card
         // positions. Guards the ablation harness (3-build comparison is only
         // meaningful if Full is deterministic). interleave_by_topic's stability
-        // is separately pinned by interleave_alternates_topics_no_two_adjacent_same.
+        // is separately pinned by interleave_spreads_topics_round_robin.
         use anki_proto::speedrun::AblationMode;
 
         fn build_and_reorder() -> Result<Vec<i32>> {
@@ -1387,6 +1528,77 @@ mod test {
         col.add_note(&mut note, DeckId(1))?;
         let out = col.speedrun_reorder_new(DeckId(1), vec![], AblationMode::Plain)?;
         assert_eq!(out.output, 0);
+        Ok(())
+    }
+
+    #[test]
+    fn reorder_new_full_no_signal_is_noop() -> Result<()> {
+        // FIX 1: Full mode has NO ordering signal when there are no positive
+        // topic weights (empty OR all <= 0). It must NO-OP like Plain — return 0
+        // and leave every new-card position untouched — instead of churning
+        // positions by dumping all cards into the unmatched tail.
+        use anki_proto::speedrun::AblationMode;
+        let mut col = Collection::new();
+        let nt = col.get_notetype_by_name("Basic")?.unwrap();
+        for (front, tag) in [("c1", "calc"), ("c2", "calc"), ("la1", "linear_algebra")] {
+            let mut note = nt.new_note();
+            note.set_field(0, front)?;
+            col.add_note(&mut note, DeckId(1))?;
+            note.tags = vec![tag.into()];
+            col.update_note(&mut note)?;
+        }
+        fn positions(col: &Collection) -> Vec<i32> {
+            let mut cards = col.storage.get_all_cards();
+            cards.sort_by_key(|c| c.id);
+            cards.iter().map(|c| c.due).collect()
+        }
+        let before = positions(&col);
+
+        // (a) Empty weights => no-op (0 changes, positions unchanged).
+        let out = col.speedrun_reorder_new(DeckId(1), vec![], AblationMode::Full)?;
+        assert_eq!(out.output, 0, "empty weights => Full no-ops");
+        assert_eq!(
+            before,
+            positions(&col),
+            "empty weights => no position churn"
+        );
+
+        // (b) All-zero weights => also a no-op (no meaningful ordering signal).
+        let zero_weights = vec![
+            ("calc".to_string(), 0.0),
+            ("linear_algebra".to_string(), 0.0),
+        ];
+        let out = col.speedrun_reorder_new(DeckId(1), zero_weights, AblationMode::Full)?;
+        assert_eq!(out.output, 0, "all-zero weights => Full no-ops");
+        assert_eq!(
+            before,
+            positions(&col),
+            "all-zero weights => no position churn"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn reorder_new_feature_off_still_reposition_with_empty_weights() -> Result<()> {
+        // FIX 1 boundary: the empty/zero-weight no-op guard is Full-ONLY. FeatureOff
+        // is the ablation BASELINE whose ordering signal is note-id, not weights, so
+        // it must STILL reposition (by sorted note id) even with empty weights.
+        use anki_proto::speedrun::AblationMode;
+        let mut col = Collection::new();
+        let nt = col.get_notetype_by_name("Basic")?.unwrap();
+        for front in ["a", "b", "c"] {
+            let mut note = nt.new_note();
+            note.set_field(0, front)?;
+            col.add_note(&mut note, DeckId(1))?;
+        }
+        // Empty weights: FeatureOff repositions all 3 by note-id (baseline), so
+        // the op reports a non-zero count (control arm stays intact).
+        let out = col.speedrun_reorder_new(DeckId(1), vec![], AblationMode::FeatureOff)?;
+        assert!(
+            out.output >= 1,
+            "FeatureOff baseline repositions by note-id even with empty weights; got {}",
+            out.output
+        );
         Ok(())
     }
 }

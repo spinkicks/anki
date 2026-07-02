@@ -26,6 +26,18 @@ impl Collection {
         if mode == AblationMode::Plain {
             return self.transact(Op::SortCards, |_col| Ok(0));
         }
+        // Full mode has NO meaningful ordering signal when there are no positive
+        // topic weights: interleave_by_topic would round-robin zero usable
+        // buckets, so every card falls to the "unmatched" tail in note order —
+        // churning positions for no benefit. Treat that like Plain (empty op).
+        // NOTE: this guard is Full-only ON PURPOSE. FeatureOff is the ablation
+        // BASELINE whose ordering signal is note-id, not weights, so it must
+        // still produce its note-id reposition even with empty/zero weights.
+        if mode == AblationMode::Full
+            && (topic_weights.is_empty() || topic_weights.iter().all(|(_, w)| *w <= 0.0))
+        {
+            return self.transact(Op::SortCards, |_col| Ok(0));
+        }
         // Gather this deck's new cards (children included), in note-id order.
         let cids = self.search_cards(
             SearchNode::from_deck_id(deck_id, true).and(StateKind::New),
@@ -42,17 +54,42 @@ impl Collection {
             } else {
                 topic_weights
                     .sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
-                let mut note_topic: Vec<(i64, Option<usize>)> = Vec::new();
+                // Unique note ids in card-encounter order (interleave_by_topic is
+                // stable within a bucket, so this order is observable and must be
+                // preserved). Was an N+1 (one get_note per note); now a SINGLE
+                // batched tag fetch (mirrors get_topic_mastery's batch pattern):
+                // one query for all tags, then map each unique note to its topic.
+                let mut unique_nids: Vec<NoteId> = Vec::new();
                 let mut seen = std::collections::HashSet::new();
                 for c in &cards {
                     if seen.insert(c.note_id) {
-                        let note = col.storage.get_note(c.note_id)?.or_not_found(c.note_id)?;
-                        note_topic.push((
-                            c.note_id.0,
-                            crate::speedrun::topic_index_for_tags(&note.tags, &topic_weights),
-                        ));
+                        unique_nids.push(c.note_id);
                     }
                 }
+                let tags_by_nid: std::collections::HashMap<NoteId, Vec<String>> = col
+                    .storage
+                    .get_note_tags_by_id_list(&unique_nids)?
+                    .into_iter()
+                    .map(|nt| {
+                        (
+                            nt.id,
+                            crate::tags::split_tags(&nt.tags)
+                                .map(str::to_string)
+                                .collect(),
+                        )
+                    })
+                    .collect();
+                let note_topic: Vec<(i64, Option<usize>)> = unique_nids
+                    .iter()
+                    .map(|nid| {
+                        let empty: Vec<String> = Vec::new();
+                        let tags = tags_by_nid.get(nid).unwrap_or(&empty);
+                        (
+                            nid.0,
+                            crate::speedrun::topic_index_for_tags(tags, &topic_weights),
+                        )
+                    })
+                    .collect();
                 let ordered_topics: Vec<usize> = (0..topic_weights.len()).collect();
                 crate::speedrun::interleave_by_topic(&ordered_topics, &note_topic)
             };
