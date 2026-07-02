@@ -78,15 +78,15 @@ License: GNU AGPL, version 3 or later; http://www.gnu.org/licenses/agpl.html
         }
     }
     .splits-hd h2 {
-        font-family: var(--mono);
+        font-family: var(--disp);
         font-size: 12px;
         letter-spacing: 0.28em;
         color: var(--fg);
         text-transform: uppercase;
-        font-weight: 600;
+        font-weight: 800;
     }
     .sort {
-        font-family: var(--mono);
+        font-family: var(--disp);
         font-size: 11px;
         letter-spacing: 0.12em;
         color: var(--muted);
@@ -112,20 +112,22 @@ License: GNU AGPL, version 3 or later; http://www.gnu.org/licenses/agpl.html
         border-top: 1px solid var(--line);
     }
     .seg .num {
-        font-family: var(--mono);
+        font-family: var(--disp);
+        font-variant-numeric: tabular-nums;
         color: var(--pace);
         font-size: 12px;
         letter-spacing: 0.1em;
     }
     .seg .name {
         font-family: var(--disp);
-        font-weight: 700;
+        font-weight: 800;
         font-size: 13px;
         letter-spacing: 0.16em;
         text-transform: uppercase;
     }
     .seg .wt {
-        font-family: var(--mono);
+        font-family: var(--disp);
+        font-variant-numeric: tabular-nums;
         color: var(--muted);
         font-size: 11px;
         float: right;

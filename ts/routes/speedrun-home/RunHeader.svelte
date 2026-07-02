@@ -19,7 +19,7 @@ License: GNU AGPL, version 3 or later; http://www.gnu.org/licenses/agpl.html
 <header>
     <div>
         <div class="wordmark">
-            SPEED
+            <span class="s">SPEED</span>
             <span class="k">RUN</span>
         </div>
         <div class="subtitle">GRE Mathematics · Subject Test</div>
@@ -57,22 +57,31 @@ License: GNU AGPL, version 3 or later; http://www.gnu.org/licenses/agpl.html
             padding: 22px 28px 18px;
         }
     }
+    /* Wordmark: Manrope ExtraBold, tight tracking, subtle two-tone light split
+       — SPEED in --fg (#e6eaef), RUN a touch brighter in --pace (#f4f7fa).
+       Hierarchy from weight+brightness, not a colored accent (identity spec §3). */
     .wordmark {
+        /* inline-flex collapses the whitespace text node the formatter inserts
+           between the two spans, so SPEED+RUN reads as one tight word. */
+        display: inline-flex;
         font-family: var(--disp);
-        font-weight: 700;
+        font-weight: 800;
         font-size: clamp(18px, 5vw, 22px);
-        letter-spacing: 0.14em;
+        letter-spacing: 0.04em;
     }
     @media (min-width: 768px) {
         .wordmark {
             font-size: 22px;
         }
     }
+    .wordmark .s {
+        color: var(--fg);
+    }
     .wordmark .k {
         color: var(--pace);
     }
     .subtitle {
-        font-family: var(--mono);
+        font-family: var(--disp);
         font-size: 11px;
         letter-spacing: 0.28em;
         color: var(--muted);
@@ -81,7 +90,8 @@ License: GNU AGPL, version 3 or later; http://www.gnu.org/licenses/agpl.html
     }
     /* Mobile-first: status left-aligned; desktop restore: right-aligned */
     .status {
-        font-family: var(--mono);
+        font-family: var(--disp);
+        font-variant-numeric: tabular-nums;
         font-size: 11px;
         letter-spacing: 0.18em;
         color: var(--muted);

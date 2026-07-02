@@ -68,8 +68,8 @@ License: GNU AGPL, version 3 or later; http://www.gnu.org/licenses/agpl.html
         }
     }
     .run {
-        font-family: var(--mono);
-        font-weight: 600;
+        font-family: var(--disp);
+        font-weight: 500;
         font-size: 14px;
         letter-spacing: 0.16em;
         text-transform: uppercase;
@@ -94,8 +94,8 @@ License: GNU AGPL, version 3 or later; http://www.gnu.org/licenses/agpl.html
     }
     /* Secondary action: outlined/ghost so START RUN stays the primary CTA. */
     .mock {
-        font-family: var(--mono);
-        font-weight: 600;
+        font-family: var(--disp);
+        font-weight: 500;
         font-size: 14px;
         letter-spacing: 0.16em;
         text-transform: uppercase;
@@ -124,7 +124,7 @@ License: GNU AGPL, version 3 or later; http://www.gnu.org/licenses/agpl.html
     }
     /* Mobile: centered; desktop restore: default (left) */
     .next {
-        font-family: var(--mono);
+        font-family: var(--disp);
         font-size: 12px;
         color: var(--muted);
         letter-spacing: 0.06em;

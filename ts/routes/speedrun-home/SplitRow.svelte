@@ -32,11 +32,11 @@ with an inline 95% confidence error-bracket band (bracket = interval, amber tick
             <span class="locked">
                 <span class="abstain-full">
                     NOT TIMED — review <b>{row.unlockN} more</b>
-                     to unlock a split
+                    to unlock a split
                 </span>
                 <span class="abstain-compact">
                     🔒 <b>{row.unlockN} more</b>
-                     to unlock
+                    to unlock
                 </span>
             </span>
         </td>
@@ -75,7 +75,8 @@ with an inline 95% confidence error-bracket band (bracket = interval, amber tick
         display: block;
         width: 100%;
         padding: 6px 16px;
-        font-family: var(--mono);
+        font-family: var(--disp);
+        font-variant-numeric: tabular-nums;
         font-size: 13px;
         border: none;
     }
@@ -146,7 +147,8 @@ with an inline 95% confidence error-bracket band (bracket = interval, amber tick
         color: var(--muted);
     }
     .locked {
-        font-family: var(--mono);
+        font-family: var(--disp);
+        font-variant-numeric: tabular-nums;
         font-size: 12px;
         color: var(--muted);
         letter-spacing: 0.04em;
@@ -177,7 +179,8 @@ with an inline 95% confidence error-bracket band (bracket = interval, amber tick
         display: flex;
         align-items: center;
         gap: 0;
-        font-family: var(--mono);
+        font-family: var(--disp);
+        font-variant-numeric: tabular-nums;
         color: var(--muted);
     }
     .band .track {
