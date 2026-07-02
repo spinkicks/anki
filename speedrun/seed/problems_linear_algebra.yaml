@@ -1,0 +1,271 @@
+# Copyright: Ankitects Pty Ltd and contributors
+# License: GNU AGPL, version 3 or later; http://www.gnu.org/licenses/agpl.html
+# Curated scorable MCQ problems for the Linear Algebra scored leaves.
+# Each problem's CorrectAnswer is fully derived in worked_solution and verified
+# by re-solving; the four distractors reflect common mistakes. 5 options A-E,
+# exactly one correct. Content assisted by reasoning (Friday), correctness
+# verified by worked solution, not asserted.
+
+# ---------------------------------------------------------------------------
+# linear_algebra::vector_spaces  (ets 0.08)
+# ---------------------------------------------------------------------------
+- stem: "What is the dimension of the vector space of \\(2\\times 2\\) real matrices?"
+  choices: ["2", "3", "4", "6", "8"]
+  correct: "C"
+  numeric_answer: "4"
+  technique: "dimension-of-matrix-space"
+  worked_solution: "A basis is \\(\\{E_{11},E_{12},E_{21},E_{22}\\}\\), the four matrices with a single \\(1\\) entry. These are linearly independent and span all \\(2\\times2\\) matrices, so the dimension is \\(4\\)."
+  topic: "linear_algebra::vector_spaces"
+  source: "Hefferon, Linear Algebra (free license), Ch. 2"
+
+- stem: "Are the vectors \\((1,2)\\) and \\((2,4)\\) in \\(\\mathbb{R}^2\\) linearly independent?"
+  choices: ["Yes, they form a basis", "No, one is a scalar multiple of the other", "Yes, they are orthogonal", "Only if scaled", "Cannot be determined"]
+  correct: "B"
+  numeric_answer: ""
+  technique: "linear-dependence-check"
+  worked_solution: "\\((2,4)=2\\cdot(1,2)\\), so the second vector is a scalar multiple of the first. A set containing a nontrivial dependency is linearly dependent, so they are NOT independent."
+  topic: "linear_algebra::vector_spaces"
+  source: "Hefferon, Linear Algebra (free license), Ch. 2"
+
+- stem: "What is the dimension of the subspace of \\(\\mathbb{R}^3\\) spanned by \\((1,0,0)\\), \\((0,1,0)\\), and \\((1,1,0)\\)?"
+  choices: ["1", "2", "3", "0", "4"]
+  correct: "B"
+  numeric_answer: "2"
+  technique: "dimension-of-span"
+  worked_solution: "The third vector \\((1,1,0)=(1,0,0)+(0,1,0)\\) is a combination of the first two. The first two are independent, so the span is a 2-dimensional subspace (the \\(xy\\)-plane); dimension \\(=2\\)."
+  topic: "linear_algebra::vector_spaces"
+  source: "Hefferon, Linear Algebra (free license), Ch. 2"
+
+- stem: "Which of these is NOT a subspace of \\(\\mathbb{R}^2\\)?"
+  choices: ["\\(\\{(x,y):y=2x\\}\\)", "\\(\\{(0,0)\\}\\)", "\\(\\{(x,y):y=x+1\\}\\)", "all of \\(\\mathbb{R}^2\\)", "the \\(x\\)-axis"]
+  correct: "C"
+  numeric_answer: ""
+  technique: "subspace-test"
+  worked_solution: "A subspace must contain the zero vector and be closed under addition and scalar multiplication. The line \\(y=x+1\\) does not pass through \\((0,0)\\) (since \\(0\\neq0+1\\)), so it is not a subspace. The other four all contain \\(0\\) and are closed."
+  topic: "linear_algebra::vector_spaces"
+  source: "Hefferon, Linear Algebra (free license), Ch. 1"
+
+- stem: "If \\(V\\) is a vector space of dimension \\(5\\), what is the maximum possible number of vectors in a linearly independent subset of \\(V\\)?"
+  choices: ["4", "5", "6", "10", "unlimited"]
+  correct: "B"
+  numeric_answer: "5"
+  technique: "independence-bound-by-dimension"
+  worked_solution: "In an \\(n\\)-dimensional space, any linearly independent set has at most \\(n\\) vectors, and a set of exactly \\(n\\) independent vectors is a basis. With \\(n=5\\), the maximum is \\(5\\)."
+  topic: "linear_algebra::vector_spaces"
+  source: "Hefferon, Linear Algebra (free license), Ch. 2"
+
+- stem: "The set \\(\\{(1,0,0),(0,1,0)\\}\\) in \\(\\mathbb{R}^3\\) is:"
+  choices: ["a basis of \\(\\mathbb{R}^3\\)", "linearly dependent", "linearly independent but not spanning \\(\\mathbb{R}^3\\)", "spanning but dependent", "empty"]
+  correct: "C"
+  numeric_answer: ""
+  technique: "basis-vs-independent"
+  worked_solution: "The two vectors are independent (neither is a multiple of the other). But two vectors cannot span the 3-dimensional space \\(\\mathbb{R}^3\\); e.g. \\((0,0,1)\\) is not in their span. So they are independent but not spanning, hence not a basis of \\(\\mathbb{R}^3\\)."
+  topic: "linear_algebra::vector_spaces"
+  source: "Hefferon, Linear Algebra (free license), Ch. 2"
+
+# ---------------------------------------------------------------------------
+# linear_algebra::matrices  (ets 0.09 — 8 problems)
+# ---------------------------------------------------------------------------
+- stem: "Compute \\(\\det\\begin{pmatrix}2&1\\\\3&4\\end{pmatrix}\\)."
+  choices: ["5", "11", "\\(-5\\)", "8", "\\(-11\\)"]
+  correct: "A"
+  numeric_answer: "5"
+  technique: "2x2-determinant"
+  worked_solution: "\\(\\det\\begin{pmatrix}a&b\\\\c&d\\end{pmatrix}=ad-bc=2\\cdot4-1\\cdot3=8-3=5\\)."
+  topic: "linear_algebra::matrices"
+  source: "Hefferon, Linear Algebra (free license), Ch. 4"
+
+- stem: "For \\(A=\\begin{pmatrix}1&2\\\\3&4\\end{pmatrix}\\), is \\(A\\) invertible?"
+  choices: ["No, det = 0", "Yes, det = \\(-2\\)", "Yes, det = 2", "No, it is singular", "Yes, det = 10"]
+  correct: "B"
+  numeric_answer: ""
+  technique: "invertibility-via-determinant"
+  worked_solution: "\\(\\det A=1\\cdot4-2\\cdot3=4-6=-2\\). Since \\(\\det A=-2\\neq0\\), \\(A\\) is invertible."
+  topic: "linear_algebra::matrices"
+  source: "Hefferon, Linear Algebra (free license), Ch. 4"
+
+- stem: "Compute the product \\(\\begin{pmatrix}1&2\\\\0&1\\end{pmatrix}\\begin{pmatrix}3\\\\4\\end{pmatrix}\\)."
+  choices: ["\\(\\begin{pmatrix}11\\\\4\\end{pmatrix}\\)", "\\(\\begin{pmatrix}3\\\\4\\end{pmatrix}\\)", "\\(\\begin{pmatrix}5\\\\4\\end{pmatrix}\\)", "\\(\\begin{pmatrix}7\\\\8\\end{pmatrix}\\)", "\\(\\begin{pmatrix}11\\\\8\\end{pmatrix}\\)"]
+  correct: "A"
+  numeric_answer: ""
+  technique: "matrix-vector-product"
+  worked_solution: "Row 1: \\(1\\cdot3+2\\cdot4=3+8=11\\). Row 2: \\(0\\cdot3+1\\cdot4=4\\). Result \\(\\begin{pmatrix}11\\\\4\\end{pmatrix}\\)."
+  topic: "linear_algebra::matrices"
+  source: "Hefferon, Linear Algebra (free license), Ch. 3"
+
+- stem: "Compute \\(\\det\\begin{pmatrix}1&0&0\\\\0&2&0\\\\0&0&3\\end{pmatrix}\\)."
+  choices: ["0", "5", "6", "1", "9"]
+  correct: "C"
+  numeric_answer: "6"
+  technique: "determinant-of-diagonal"
+  worked_solution: "The determinant of a diagonal (or triangular) matrix is the product of its diagonal entries: \\(1\\cdot2\\cdot3=6\\)."
+  topic: "linear_algebra::matrices"
+  source: "Hefferon, Linear Algebra (free license), Ch. 4"
+
+- stem: "The system \\(\\begin{cases}x+y=3\\\\x-y=1\\end{cases}\\) has solution:"
+  choices: ["\\((2,1)\\)", "\\((1,2)\\)", "\\((3,0)\\)", "\\((1,1)\\)", "no solution"]
+  correct: "A"
+  numeric_answer: ""
+  technique: "solve-linear-system"
+  worked_solution: "Add the equations: \\(2x=4\\Rightarrow x=2\\). Substitute into \\(x+y=3\\): \\(2+y=3\\Rightarrow y=1\\). Solution \\((2,1)\\). Check: \\(2-1=1\\) ✓."
+  topic: "linear_algebra::matrices"
+  source: "Hefferon, Linear Algebra (free license), Ch. 1"
+
+- stem: "What is the rank of \\(\\begin{pmatrix}1&2\\\\2&4\\end{pmatrix}\\)?"
+  choices: ["0", "1", "2", "3", "4"]
+  correct: "B"
+  numeric_answer: "1"
+  technique: "rank-of-matrix"
+  worked_solution: "Row 2 \\(=2\\times\\) Row 1, so after elimination there is one nonzero row. The rank (number of linearly independent rows) is \\(1\\). Equivalently \\(\\det=1\\cdot4-2\\cdot2=0\\), so rank \\(<2\\), and it is nonzero, so rank \\(=1\\)."
+  topic: "linear_algebra::matrices"
+  source: "Hefferon, Linear Algebra (free license), Ch. 3"
+
+- stem: "If \\(A\\) is \\(3\\times3\\) with \\(\\det A=4\\), what is \\(\\det(2A)\\)?"
+  choices: ["8", "16", "32", "24", "64"]
+  correct: "C"
+  numeric_answer: "32"
+  technique: "scalar-multiple-determinant"
+  worked_solution: "For an \\(n\\times n\\) matrix, \\(\\det(cA)=c^n\\det A\\). Here \\(n=3,\\,c=2\\): \\(\\det(2A)=2^3\\cdot4=8\\cdot4=32\\)."
+  topic: "linear_algebra::matrices"
+  source: "Hefferon, Linear Algebra (free license), Ch. 4"
+
+- stem: "Compute the transpose of \\(\\begin{pmatrix}1&2&3\\\\4&5&6\\end{pmatrix}\\)."
+  choices: ["\\(\\begin{pmatrix}1&4\\\\2&5\\\\3&6\\end{pmatrix}\\)", "\\(\\begin{pmatrix}1&2&3\\\\4&5&6\\end{pmatrix}\\)", "\\(\\begin{pmatrix}3&2&1\\\\6&5&4\\end{pmatrix}\\)", "\\(\\begin{pmatrix}4&1\\\\5&2\\\\6&3\\end{pmatrix}\\)", "\\(\\begin{pmatrix}1&4&2\\\\5&3&6\\end{pmatrix}\\)"]
+  correct: "A"
+  numeric_answer: ""
+  technique: "matrix-transpose"
+  worked_solution: "The transpose swaps rows and columns: \\((A^T)_{ij}=A_{ji}\\). Row \\(i\\) of \\(A\\) becomes column \\(i\\) of \\(A^T\\). A \\(2\\times3\\) matrix transposes to \\(3\\times2\\): \\(\\begin{pmatrix}1&4\\\\2&5\\\\3&6\\end{pmatrix}\\)."
+  topic: "linear_algebra::matrices"
+  source: "Hefferon, Linear Algebra (free license), Ch. 3"
+
+# ---------------------------------------------------------------------------
+# linear_algebra::eigen  (ets 0.10 — 8 problems)
+# ---------------------------------------------------------------------------
+- stem: "Find the eigenvalues of \\(\\begin{pmatrix}2&0\\\\0&3\\end{pmatrix}\\)."
+  choices: ["\\(2,3\\)", "\\(0,0\\)", "\\(5\\) only", "\\(6\\) only", "\\(-2,-3\\)"]
+  correct: "A"
+  numeric_answer: ""
+  technique: "eigenvalues-of-diagonal"
+  worked_solution: "For a diagonal matrix the eigenvalues are the diagonal entries. So the eigenvalues are \\(2\\) and \\(3\\). (Check: \\(\\det(A-\\lambda I)=(2-\\lambda)(3-\\lambda)=0\\).)"
+  topic: "linear_algebra::eigen"
+  source: "Hefferon, Linear Algebra (free license), Ch. 5"
+
+- stem: "Find the eigenvalues of \\(A=\\begin{pmatrix}2&1\\\\1&2\\end{pmatrix}\\)."
+  choices: ["\\(1,3\\)", "\\(2,2\\)", "\\(0,4\\)", "\\(-1,3\\)", "\\(1,2\\)"]
+  correct: "A"
+  numeric_answer: ""
+  technique: "eigenvalue-char-poly"
+  worked_solution: "Characteristic polynomial: \\(\\det(A-\\lambda I)=(2-\\lambda)^2-1=\\lambda^2-4\\lambda+3=(\\lambda-1)(\\lambda-3)\\). Roots \\(\\lambda=1\\) and \\(\\lambda=3\\)."
+  topic: "linear_algebra::eigen"
+  source: "Hefferon, Linear Algebra (free license), Ch. 5"
+
+- stem: "The trace of \\(\\begin{pmatrix}4&7\\\\2&1\\end{pmatrix}\\) equals the sum of its eigenvalues. What is that sum?"
+  choices: ["5", "6", "4", "8", "\\(-2\\)"]
+  correct: "A"
+  numeric_answer: "5"
+  technique: "trace-equals-sum-eigenvalues"
+  worked_solution: "The trace is the sum of the diagonal entries: \\(4+1=5\\). The trace equals the sum of the eigenvalues, so that sum is \\(5\\)."
+  topic: "linear_algebra::eigen"
+  source: "Hefferon, Linear Algebra (free license), Ch. 5"
+
+- stem: "For \\(A=\\begin{pmatrix}3&0\\\\0&5\\end{pmatrix}\\), the product of the eigenvalues equals \\(\\det A\\). What is it?"
+  choices: ["8", "15", "2", "0", "35"]
+  correct: "B"
+  numeric_answer: "15"
+  technique: "det-equals-product-eigenvalues"
+  worked_solution: "Eigenvalues are \\(3\\) and \\(5\\); their product is \\(15\\). This equals \\(\\det A=3\\cdot5-0=15\\)."
+  topic: "linear_algebra::eigen"
+  source: "Hefferon, Linear Algebra (free license), Ch. 5"
+
+- stem: "An eigenvector of \\(A=\\begin{pmatrix}2&0\\\\0&3\\end{pmatrix}\\) for the eigenvalue \\(2\\) is:"
+  choices: ["\\((1,0)\\)", "\\((0,1)\\)", "\\((1,1)\\)", "\\((2,0)\\) only", "\\((0,0)\\)"]
+  correct: "A"
+  numeric_answer: ""
+  technique: "eigenvector-computation"
+  worked_solution: "We need \\(Av=2v\\). For \\(v=(1,0)\\): \\(Av=(2\\cdot1,\\,3\\cdot0)=(2,0)=2(1,0)\\) ✓. (The zero vector is never an eigenvector; \\((0,1)\\) has eigenvalue \\(3\\); \\((1,1)\\) is not an eigenvector.)"
+  topic: "linear_algebra::eigen"
+  source: "Hefferon, Linear Algebra (free license), Ch. 5"
+
+- stem: "Find the eigenvalues of the upper-triangular matrix \\(\\begin{pmatrix}1&5\\\\0&4\\end{pmatrix}\\)."
+  choices: ["\\(1,4\\)", "\\(1,5\\)", "\\(5,4\\)", "\\(0,4\\)", "\\(1,0\\)"]
+  correct: "A"
+  numeric_answer: ""
+  technique: "eigenvalues-of-triangular"
+  worked_solution: "For a triangular matrix, the eigenvalues are the diagonal entries: \\(1\\) and \\(4\\). (Check: \\(\\det(A-\\lambda I)=(1-\\lambda)(4-\\lambda)=0\\), independent of the off-diagonal \\(5\\).)"
+  topic: "linear_algebra::eigen"
+  source: "Hefferon, Linear Algebra (free license), Ch. 5"
+
+- stem: "One eigenvalue of \\(A=\\begin{pmatrix}0&1\\\\-2&-3\\end{pmatrix}\\) is:"
+  choices: ["\\(-1\\)", "1", "0", "3", "2"]
+  correct: "A"
+  numeric_answer: ""
+  technique: "eigenvalue-char-poly"
+  worked_solution: "\\(\\det(A-\\lambda I)=\\det\\begin{pmatrix}-\\lambda&1\\\\-2&-3-\\lambda\\end{pmatrix}=(-\\lambda)(-3-\\lambda)-(1)(-2)=\\lambda^2+3\\lambda+2=(\\lambda+1)(\\lambda+2)\\). Eigenvalues \\(-1,-2\\); \\(-1\\) is listed."
+  topic: "linear_algebra::eigen"
+  source: "Hefferon, Linear Algebra (free license), Ch. 5"
+
+- stem: "Is the matrix \\(\\begin{pmatrix}1&1\\\\0&1\\end{pmatrix}\\) diagonalizable over \\(\\mathbb{R}\\)?"
+  choices: ["Yes, two distinct eigenvalues", "No, only one independent eigenvector", "Yes, it is symmetric", "No, determinant is zero", "Yes, it is already diagonal"]
+  correct: "B"
+  numeric_answer: ""
+  technique: "diagonalizability-test"
+  worked_solution: "The only eigenvalue is \\(\\lambda=1\\) (repeated, from the triangular diagonal). Solving \\((A-I)v=0\\) gives \\(\\begin{pmatrix}0&1\\\\0&0\\end{pmatrix}v=0\\), i.e. the second component is \\(0\\); eigenvectors are multiples of \\((1,0)\\) — only ONE independent eigenvector. A \\(2\\times2\\) matrix needs 2 independent eigenvectors to be diagonalizable, so it is NOT diagonalizable."
+  topic: "linear_algebra::eigen"
+  source: "Hefferon, Linear Algebra (free license), Ch. 5"
+
+# ---------------------------------------------------------------------------
+# linear_algebra::linear_maps  (ets 0.08 — 6 problems)
+# ---------------------------------------------------------------------------
+- stem: "A linear map \\(T:\\mathbb{R}^5\\to\\mathbb{R}^3\\) has \\(\\dim(\\ker T)=2\\). By rank-nullity, what is \\(\\dim(\\operatorname{im} T)\\)?"
+  choices: ["2", "3", "5", "1", "0"]
+  correct: "B"
+  numeric_answer: "3"
+  technique: "rank-nullity"
+  worked_solution: "Rank-nullity: \\(\\dim(\\ker T)+\\dim(\\operatorname{im} T)=\\dim(\\text{domain})=5\\). So \\(\\dim(\\operatorname{im} T)=5-2=3\\)."
+  topic: "linear_algebra::linear_maps"
+  source: "Hefferon, Linear Algebra (free license), Ch. 3"
+
+- stem: "For \\(T:\\mathbb{R}^4\\to\\mathbb{R}^4\\) with rank \\(4\\), what is \\(\\dim(\\ker T)\\)?"
+  choices: ["0", "1", "4", "2", "3"]
+  correct: "A"
+  numeric_answer: "0"
+  technique: "rank-nullity"
+  worked_solution: "Rank-nullity: \\(\\dim(\\ker T)=\\dim(\\text{domain})-\\operatorname{rank}=4-4=0\\). A trivial kernel means \\(T\\) is injective (here also bijective)."
+  topic: "linear_algebra::linear_maps"
+  source: "Hefferon, Linear Algebra (free license), Ch. 3"
+
+- stem: "A linear map \\(T:V\\to W\\) is injective if and only if:"
+  choices: ["its image is all of \\(W\\)", "its kernel is \\(\\{0\\}\\)", "\\(\\dim V=\\dim W\\)", "it is surjective", "its rank is \\(0\\)"]
+  correct: "B"
+  numeric_answer: ""
+  technique: "injectivity-kernel"
+  worked_solution: "A linear map is injective iff \\(\\ker T=\\{0\\}\\): if \\(T(u)=T(v)\\) then \\(T(u-v)=0\\), so \\(u-v\\in\\ker T\\); the kernel being trivial forces \\(u=v\\). Surjectivity concerns the image, a separate property."
+  topic: "linear_algebra::linear_maps"
+  source: "Hefferon, Linear Algebra (free license), Ch. 3"
+
+- stem: "The linear map \\(T(x,y)=(x,0)\\) on \\(\\mathbb{R}^2\\) (projection onto the \\(x\\)-axis) has rank:"
+  choices: ["0", "1", "2", "3", "undefined"]
+  correct: "B"
+  numeric_answer: "1"
+  technique: "rank-of-projection"
+  worked_solution: "The image is \\(\\{(x,0):x\\in\\mathbb{R}\\}\\), the \\(x\\)-axis, which is 1-dimensional. So the rank is \\(1\\). (The kernel is the \\(y\\)-axis, also dimension \\(1\\); \\(1+1=2=\\dim\\mathbb{R}^2\\) ✓.)"
+  topic: "linear_algebra::linear_maps"
+  source: "Hefferon, Linear Algebra (free license), Ch. 3"
+
+- stem: "If \\(T:\\mathbb{R}^3\\to\\mathbb{R}^2\\) is a linear map, can \\(T\\) be injective?"
+  choices: ["Yes, always", "No, because the domain dimension exceeds the codomain dimension", "Only if it is surjective", "Yes, if rank is 3", "Only if \\(T=0\\)"]
+  correct: "B"
+  numeric_answer: ""
+  technique: "injectivity-dimension-bound"
+  worked_solution: "By rank-nullity, \\(\\dim(\\ker T)=3-\\operatorname{rank}(T)\\). Since \\(\\operatorname{rank}(T)\\le\\dim(\\text{codomain})=2\\), we get \\(\\dim(\\ker T)\\ge3-2=1>0\\). A nontrivial kernel means \\(T\\) is never injective."
+  topic: "linear_algebra::linear_maps"
+  source: "Hefferon, Linear Algebra (free license), Ch. 3"
+
+- stem: "The kernel of the linear map \\(T(x,y,z)=(x+y+z)\\) from \\(\\mathbb{R}^3\\to\\mathbb{R}\\) has dimension:"
+  choices: ["0", "1", "2", "3", "does not exist"]
+  correct: "C"
+  numeric_answer: "2"
+  technique: "kernel-dimension"
+  worked_solution: "\\(\\ker T=\\{(x,y,z):x+y+z=0\\}\\) is a plane through the origin in \\(\\mathbb{R}^3\\), which is 2-dimensional. Check via rank-nullity: \\(T\\) is nonzero so \\(\\operatorname{rank}=1\\), and \\(\\dim\\ker=3-1=2\\)."
+  topic: "linear_algebra::linear_maps"
+  source: "Hefferon, Linear Algebra (free license), Ch. 3"

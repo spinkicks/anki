@@ -22,6 +22,13 @@ PROFILE = ROOT / "exam_profiles" / "gre_math.json"
 MODEL_ID = 1607392319
 DECK_ID = 2059400110
 
+# Scored-MCQ note type + subdeck (distinct ids; blessed, permanent — never reuse
+# the declarative MODEL_ID/DECK_ID). The Problems subdeck lets mini-mock filtered
+# searches target ONLY scorable problems.
+PROBLEM_MODEL_ID = 2047815909
+PROBLEM_DECK_ID = 2059400111
+CHOICE_LETTERS = ("A", "B", "C", "D", "E")
+
 MODEL = genanki.Model(
     MODEL_ID,
     "Speedrun::Declarative",
@@ -43,6 +50,36 @@ MODEL = genanki.Model(
     # Bundled MathJax rendering is handled by Anki's built-in MathJax on \\( \\).
 )
 
+PROBLEM_MODEL = genanki.Model(
+    PROBLEM_MODEL_ID,
+    "Speedrun::Problem",
+    fields=[
+        {"name": "Stem"},
+        {"name": "Choices"},
+        {"name": "NumericAnswer"},
+        {"name": "CorrectAnswer"},
+        {"name": "WorkedSolution"},
+        {"name": "TopicID"},
+        {"name": "TechniqueTag"},
+        {"name": "Source"},
+        {"name": "IRTParams"},
+    ],
+    templates=[
+        {
+            "name": "Card 1",
+            "qfmt": "{{Stem}}"
+            '<div style="margin-top:8px;white-space:pre-line">{{Choices}}</div>',
+            "afmt": '{{FrontSide}}<hr id="answer">'
+            '<div style="margin-bottom:8px"><b>Answer: {{CorrectAnswer}}</b></div>'
+            "{{WorkedSolution}}"
+            '<div style="font-size:12px;color:#888;margin-top:8px">'
+            "Topic: {{TopicID}} &middot; Technique: {{TechniqueTag}} "
+            "&middot; Source: {{Source}}</div>",
+        }
+    ],
+    # Bundled MathJax rendering is handled by Anki's built-in MathJax on \\( \\).
+)
+
 
 def _leaf_topic_ids() -> set[str]:
     profile = json.loads(PROFILE.read_text(encoding="utf-8"))
@@ -55,6 +92,19 @@ def load_notes() -> list[dict]:
         data = yaml.safe_load((SEED_DIR / name).read_text(encoding="utf-8"))
         notes.extend(data)
     return notes
+
+
+def load_problems() -> list[dict]:
+    problems: list[dict] = []
+    for name in ("problems_calc.yaml", "problems_linear_algebra.yaml"):
+        data = yaml.safe_load((SEED_DIR / name).read_text(encoding="utf-8"))
+        problems.extend(data)
+    return problems
+
+
+def _format_choices(choices: list[str]) -> str:
+    """Join 5 author-supplied option strings into labeled "(A) .." lines."""
+    return "\n".join(f"({letter}) {text}" for letter, text in zip(CHOICE_LETTERS, choices))
 
 
 def build() -> Path:
@@ -71,11 +121,42 @@ def build() -> Path:
             guid=genanki.guid_for(n["front"], topic),  # stable across runs
         )
         deck.add_note(note)
+
+    problem_deck = genanki.Deck(PROBLEM_DECK_ID, "Speedrun::GRE Math::Problems")
+    for p in load_problems():
+        topic = p["topic"]
+        if topic not in valid_topics:
+            raise ValueError(
+                f"problem topic {topic!r} is not a scored leaf in gre_math.json"
+            )
+        note = genanki.Note(
+            model=PROBLEM_MODEL,
+            fields=[
+                p["stem"],
+                _format_choices(p["choices"]),
+                str(p.get("numeric_answer", "")),
+                p["correct"],
+                p["worked_solution"],
+                topic,
+                p["technique"],
+                p["source"],
+                str(p.get("irt_params", "")),
+            ],
+            # hierarchical topic tag + flat Speedrun::Problem tag (engine scores
+            # Performance via tag:Speedrun::Problem).
+            tags=[topic, "Speedrun::Problem"],
+            guid=genanki.guid_for(p["stem"], topic, "problem"),  # distinct salt
+        )
+        problem_deck.add_note(note)
+
     OUT.parent.mkdir(parents=True, exist_ok=True)
-    genanki.Package(deck).write_to_file(str(OUT))
+    genanki.Package([deck, problem_deck]).write_to_file(str(OUT))
     return OUT
 
 
 if __name__ == "__main__":
     path = build()
-    print(f"wrote {path} ({len(load_notes())} notes)")
+    print(
+        f"wrote {path} ({len(load_notes())} declarative notes, "
+        f"{len(load_problems())} problems)"
+    )

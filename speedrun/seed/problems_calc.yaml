@@ -1,0 +1,346 @@
+# Copyright: Ankitects Pty Ltd and contributors
+# License: GNU AGPL, version 3 or later; http://www.gnu.org/licenses/agpl.html
+# Curated scorable MCQ problems for the Calculus scored leaves.
+# Each problem's CorrectAnswer is fully derived in worked_solution and verified
+# by re-solving; the four distractors reflect common mistakes. 5 options A-E,
+# exactly one correct. Content assisted by reasoning (Friday), correctness
+# verified by worked solution, not asserted.
+
+# ---------------------------------------------------------------------------
+# calc::limits  (ets 0.10)
+# ---------------------------------------------------------------------------
+- stem: "Evaluate \\(\\displaystyle\\lim_{x\\to 0}\\frac{\\sin(3x)}{x}\\)."
+  choices: ["0", "1", "3", "\\(\\tfrac{1}{3}\\)", "does not exist"]
+  correct: "C"
+  numeric_answer: "3"
+  technique: "standard-trig-limit"
+  worked_solution: "Write \\(\\frac{\\sin(3x)}{x}=3\\cdot\\frac{\\sin(3x)}{3x}\\). As \\(x\\to0\\), \\(3x\\to0\\) and \\(\\frac{\\sin(3x)}{3x}\\to1\\) by the standard limit \\(\\lim_{u\\to0}\\frac{\\sin u}{u}=1\\). Hence the limit is \\(3\\cdot1=3\\)."
+  topic: "calc::limits"
+  source: "OpenStax Calculus Vol. 1, §2.3 (CC BY 4.0)"
+
+- stem: "Evaluate \\(\\displaystyle\\lim_{x\\to\\infty}\\frac{3x^2-5x+1}{2x^2+7}\\)."
+  choices: ["0", "\\(\\tfrac{3}{2}\\)", "\\(\\tfrac{2}{3}\\)", "\\(\\infty\\)", "\\(-\\tfrac{5}{7}\\)"]
+  correct: "B"
+  numeric_answer: ""
+  technique: "rational-limit-at-infinity"
+  worked_solution: "Divide numerator and denominator by \\(x^2\\): \\(\\frac{3-5/x+1/x^2}{2+7/x^2}\\). As \\(x\\to\\infty\\) the terms \\(5/x,1/x^2,7/x^2\\to0\\), leaving \\(\\frac{3}{2}\\). The limit of a rational function where numerator and denominator have equal degree is the ratio of leading coefficients."
+  topic: "calc::limits"
+  source: "OpenStax Calculus Vol. 1, §4.6 (CC BY 4.0)"
+
+- stem: "Evaluate \\(\\displaystyle\\lim_{x\\to 2}\\frac{x^2-4}{x-2}\\)."
+  choices: ["0", "2", "4", "does not exist", "\\(\\infty\\)"]
+  correct: "C"
+  numeric_answer: "4"
+  technique: "factor-and-cancel"
+  worked_solution: "Factor: \\(x^2-4=(x-2)(x+2)\\). For \\(x\\neq2\\), \\(\\frac{(x-2)(x+2)}{x-2}=x+2\\). Then \\(\\lim_{x\\to2}(x+2)=4\\). The \\(0/0\\) form is removable after cancellation."
+  topic: "calc::limits"
+  source: "OpenStax Calculus Vol. 1, §2.3 (CC BY 4.0)"
+
+- stem: "Evaluate \\(\\displaystyle\\lim_{x\\to 0}\\frac{1-\\cos x}{x^2}\\)."
+  choices: ["0", "\\(\\tfrac{1}{2}\\)", "1", "2", "does not exist"]
+  correct: "B"
+  numeric_answer: ""
+  technique: "lhopital-or-series"
+  worked_solution: "This is a \\(0/0\\) form. Apply L'Hôpital's rule twice: \\(\\lim\\frac{1-\\cos x}{x^2}=\\lim\\frac{\\sin x}{2x}=\\lim\\frac{\\cos x}{2}=\\frac{1}{2}\\). (Equivalently, \\(1-\\cos x\\approx \\tfrac{x^2}{2}\\) for small \\(x\\).)"
+  topic: "calc::limits"
+  source: "OpenStax Calculus Vol. 1, §4.8 (CC BY 4.0)"
+
+- stem: "For \\(f(x)=\\dfrac{|x|}{x}\\), what is \\(\\displaystyle\\lim_{x\\to 0} f(x)\\)?"
+  choices: ["0", "1", "\\(-1\\)", "does not exist", "\\(\\infty\\)"]
+  correct: "D"
+  numeric_answer: ""
+  technique: "one-sided-limits"
+  worked_solution: "For \\(x>0\\), \\(|x|/x=1\\), so the right-hand limit is \\(1\\). For \\(x<0\\), \\(|x|/x=-1\\), so the left-hand limit is \\(-1\\). Since the one-sided limits disagree \\((1\\neq-1)\\), the two-sided limit does not exist."
+  topic: "calc::limits"
+  source: "OpenStax Calculus Vol. 1, §2.2 (CC BY 4.0)"
+
+- stem: "Evaluate \\(\\displaystyle\\lim_{x\\to 0}\\frac{e^{x}-1}{x}\\)."
+  choices: ["0", "1", "\\(e\\)", "\\(\\infty\\)", "does not exist"]
+  correct: "B"
+  numeric_answer: "1"
+  technique: "derivative-as-limit"
+  worked_solution: "This \\(0/0\\) form is the definition of the derivative of \\(e^x\\) at \\(0\\): \\(\\lim_{x\\to0}\\frac{e^x-e^0}{x-0}=\\frac{d}{dx}e^x\\big|_{0}=e^0=1\\). By L'Hôpital: \\(\\lim\\frac{e^x-1}{x}=\\lim\\frac{e^x}{1}=1\\)."
+  topic: "calc::limits"
+  source: "OpenStax Calculus Vol. 1, §4.8 (CC BY 4.0)"
+
+# ---------------------------------------------------------------------------
+# calc::single_var::differentiation  (ets 0.14 — higher weight, 8 problems)
+# ---------------------------------------------------------------------------
+- stem: "If \\(f(x)=x^3-3x\\), at which \\(x>0\\) does \\(f\\) have a local minimum?"
+  choices: ["\\(x=0\\)", "\\(x=1\\)", "\\(x=\\sqrt{3}\\)", "\\(x=3\\)", "\\(x=-1\\)"]
+  correct: "B"
+  numeric_answer: "1"
+  technique: "critical-points-second-derivative"
+  worked_solution: "\\(f'(x)=3x^2-3=3(x^2-1)\\), zero at \\(x=\\pm1\\). \\(f''(x)=6x\\). At \\(x=1\\), \\(f''(1)=6>0\\), a local minimum. (At \\(x=-1\\), \\(f''=-6<0\\), a local maximum.) The positive local minimum is at \\(x=1\\)."
+  topic: "calc::single_var::differentiation"
+  source: "OpenStax Calculus Vol. 1, §4.5 (CC BY 4.0)"
+
+- stem: "Compute \\(\\dfrac{d}{dx}\\big[x^2 e^{x}\\big]\\)."
+  choices: ["\\(2xe^x\\)", "\\(x^2 e^x\\)", "\\((x^2+2x)e^x\\)", "\\((2x+1)e^x\\)", "\\(2x e^{x}+x^2\\)"]
+  correct: "C"
+  numeric_answer: ""
+  technique: "product-rule"
+  worked_solution: "Product rule: \\((uv)'=u'v+uv'\\) with \\(u=x^2,\\,v=e^x\\). So \\(\\frac{d}{dx}[x^2e^x]=2x\\,e^x+x^2 e^x=(x^2+2x)e^x\\)."
+  topic: "calc::single_var::differentiation"
+  source: "OpenStax Calculus Vol. 1, §3.3 (CC BY 4.0)"
+
+- stem: "Compute \\(\\dfrac{d}{dx}\\,\\sin(x^2)\\)."
+  choices: ["\\(\\cos(x^2)\\)", "\\(2x\\cos(x^2)\\)", "\\(2x\\sin(x^2)\\)", "\\(-2x\\cos(x^2)\\)", "\\(\\cos(2x)\\)"]
+  correct: "B"
+  numeric_answer: ""
+  technique: "chain-rule"
+  worked_solution: "Chain rule: \\(\\frac{d}{dx}\\sin(g(x))=\\cos(g(x))\\,g'(x)\\) with \\(g(x)=x^2,\\,g'(x)=2x\\). Thus the derivative is \\(2x\\cos(x^2)\\)."
+  topic: "calc::single_var::differentiation"
+  source: "OpenStax Calculus Vol. 1, §3.6 (CC BY 4.0)"
+
+- stem: "Find the slope of the tangent line to \\(y=\\ln x\\) at \\(x=e\\)."
+  choices: ["\\(e\\)", "1", "\\(\\tfrac{1}{e}\\)", "0", "\\(\\tfrac{1}{e^2}\\)"]
+  correct: "C"
+  numeric_answer: ""
+  technique: "derivative-of-log"
+  worked_solution: "\\(\\frac{d}{dx}\\ln x=\\frac{1}{x}\\). At \\(x=e\\) the slope is \\(\\frac{1}{e}\\)."
+  topic: "calc::single_var::differentiation"
+  source: "OpenStax Calculus Vol. 1, §3.9 (CC BY 4.0)"
+
+- stem: "For \\(f(x)=x^3\\), what is \\(f''(2)\\)?"
+  choices: ["6", "8", "12", "24", "3"]
+  correct: "C"
+  numeric_answer: "12"
+  technique: "higher-order-derivative"
+  worked_solution: "\\(f'(x)=3x^2\\), \\(f''(x)=6x\\). Then \\(f''(2)=6\\cdot2=12\\)."
+  topic: "calc::single_var::differentiation"
+  source: "OpenStax Calculus Vol. 1, §3.2 (CC BY 4.0)"
+
+- stem: "Use implicit differentiation on \\(x^2+y^2=25\\) to find \\(\\dfrac{dy}{dx}\\) at \\((3,4)\\)."
+  choices: ["\\(-\\tfrac{3}{4}\\)", "\\(\\tfrac{3}{4}\\)", "\\(-\\tfrac{4}{3}\\)", "\\(\\tfrac{4}{3}\\)", "\\(-\\tfrac{3}{5}\\)"]
+  correct: "A"
+  numeric_answer: ""
+  technique: "implicit-differentiation"
+  worked_solution: "Differentiate: \\(2x+2y\\,y'=0\\Rightarrow y'=-\\frac{x}{y}\\). At \\((3,4)\\), \\(y'=-\\frac{3}{4}\\)."
+  topic: "calc::single_var::differentiation"
+  source: "OpenStax Calculus Vol. 1, §3.8 (CC BY 4.0)"
+
+- stem: "A particle's position is \\(s(t)=t^3-6t^2+9t\\). At what \\(t>0\\) is its velocity zero for the first time?"
+  choices: ["\\(t=0\\)", "\\(t=1\\)", "\\(t=2\\)", "\\(t=3\\)", "\\(t=9\\)"]
+  correct: "B"
+  numeric_answer: "1"
+  technique: "velocity-as-derivative"
+  worked_solution: "Velocity \\(v(t)=s'(t)=3t^2-12t+9=3(t^2-4t+3)=3(t-1)(t-3)\\). Zeros at \\(t=1\\) and \\(t=3\\); the first positive time is \\(t=1\\)."
+  topic: "calc::single_var::differentiation"
+  source: "OpenStax Calculus Vol. 1, §3.4 (CC BY 4.0)"
+
+- stem: "Compute \\(\\dfrac{d}{dx}\\,\\tan x\\)."
+  choices: ["\\(\\sec x\\tan x\\)", "\\(\\sec^2 x\\)", "\\(-\\csc^2 x\\)", "\\(\\cot x\\)", "\\(\\sec x\\)"]
+  correct: "B"
+  numeric_answer: ""
+  technique: "trig-derivative"
+  worked_solution: "Write \\(\\tan x=\\frac{\\sin x}{\\cos x}\\) and apply the quotient rule: \\(\\frac{\\cos x\\cos x-\\sin x(-\\sin x)}{\\cos^2 x}=\\frac{\\cos^2 x+\\sin^2 x}{\\cos^2 x}=\\frac{1}{\\cos^2 x}=\\sec^2 x\\)."
+  topic: "calc::single_var::differentiation"
+  source: "OpenStax Calculus Vol. 1, §3.5 (CC BY 4.0)"
+
+# ---------------------------------------------------------------------------
+# calc::single_var::integration  (ets 0.16 — highest weight, 8 problems)
+# ---------------------------------------------------------------------------
+- stem: "Evaluate \\(\\displaystyle\\int_0^1 (3x^2+2x)\\,dx\\)."
+  choices: ["1", "2", "3", "\\(\\tfrac{5}{2}\\)", "5"]
+  correct: "B"
+  numeric_answer: "2"
+  technique: "power-rule-definite"
+  worked_solution: "Antiderivative: \\(x^3+x^2\\). Evaluate: \\((1^3+1^2)-(0+0)=1+1=2\\)."
+  topic: "calc::single_var::integration"
+  source: "OpenStax Calculus Vol. 1, §5.3 (CC BY 4.0)"
+
+- stem: "Evaluate \\(\\displaystyle\\int_1^{e} \\frac{1}{x}\\,dx\\)."
+  choices: ["0", "1", "\\(e\\)", "\\(e-1\\)", "\\(\\ln(e-1)\\)"]
+  correct: "B"
+  numeric_answer: "1"
+  technique: "log-antiderivative"
+  worked_solution: "\\(\\int\\frac{1}{x}\\,dx=\\ln|x|\\). Then \\(\\ln e-\\ln 1=1-0=1\\)."
+  topic: "calc::single_var::integration"
+  source: "OpenStax Calculus Vol. 1, §5.6 (CC BY 4.0)"
+
+- stem: "Evaluate \\(\\displaystyle\\int_0^{\\pi} \\sin x\\,dx\\)."
+  choices: ["0", "1", "2", "\\(\\pi\\)", "\\(-2\\)"]
+  correct: "C"
+  numeric_answer: "2"
+  technique: "trig-antiderivative"
+  worked_solution: "\\(\\int\\sin x\\,dx=-\\cos x\\). Evaluate: \\(-\\cos\\pi-(-\\cos 0)=-(-1)-(-(1))=1+1=2\\)."
+  topic: "calc::single_var::integration"
+  source: "OpenStax Calculus Vol. 1, §5.3 (CC BY 4.0)"
+
+- stem: "Evaluate \\(\\displaystyle\\int_0^1 2x\\,e^{x^2}\\,dx\\)."
+  choices: ["\\(e-1\\)", "\\(e\\)", "\\(1\\)", "\\(\\tfrac{e-1}{2}\\)", "\\(e^2-1\\)"]
+  correct: "A"
+  numeric_answer: ""
+  technique: "u-substitution"
+  worked_solution: "Let \\(u=x^2\\), \\(du=2x\\,dx\\). Limits: \\(x=0\\to u=0\\), \\(x=1\\to u=1\\). Integral becomes \\(\\int_0^1 e^{u}\\,du=e^u\\big|_0^1=e-1\\)."
+  topic: "calc::single_var::integration"
+  source: "OpenStax Calculus Vol. 1, §5.5 (CC BY 4.0)"
+
+- stem: "Evaluate \\(\\displaystyle\\int_0^1 x\\,e^{x}\\,dx\\)."
+  choices: ["\\(e\\)", "1", "\\(e-1\\)", "\\(2e-1\\)", "0"]
+  correct: "B"
+  numeric_answer: "1"
+  technique: "integration-by-parts"
+  worked_solution: "By parts with \\(u=x,\\,dv=e^x\\,dx\\): \\(du=dx,\\,v=e^x\\). \\(\\int x e^x\\,dx=xe^x-\\int e^x\\,dx=xe^x-e^x\\). Evaluate \\(0\\) to \\(1\\): \\((1\\cdot e-e)-(0-1)=(e-e)-(-1)=0+1=1\\)."
+  topic: "calc::single_var::integration"
+  source: "OpenStax Calculus Vol. 2, §3.1 (CC BY 4.0)"
+
+- stem: "Find the area under \\(y=x^2\\) from \\(x=0\\) to \\(x=3\\)."
+  choices: ["3", "6", "9", "\\(\\tfrac{27}{2}\\)", "27"]
+  correct: "C"
+  numeric_answer: "9"
+  technique: "area-under-curve"
+  worked_solution: "Area \\(=\\int_0^3 x^2\\,dx=\\frac{x^3}{3}\\big|_0^3=\\frac{27}{3}-0=9\\). (Distractor \\(27\\) is \\(x^3\\) unevaluated by \\(3\\); \\(27/2\\) comes from mis-integrating \\(x\\) instead of \\(x^2\\).)"
+  topic: "calc::single_var::integration"
+  source: "OpenStax Calculus Vol. 1, §5.2 (CC BY 4.0)"
+
+- stem: "Evaluate \\(\\displaystyle\\int_{-2}^{2} x^3\\,dx\\)."
+  choices: ["0", "4", "8", "16", "\\(-8\\)"]
+  correct: "A"
+  numeric_answer: "0"
+  technique: "odd-function-symmetry"
+  worked_solution: "\\(x^3\\) is an odd function and the interval \\([-2,2]\\) is symmetric about \\(0\\), so the integral is \\(0\\). Directly: \\(\\frac{x^4}{4}\\big|_{-2}^{2}=\\frac{16}{4}-\\frac{16}{4}=4-4=0\\)."
+  topic: "calc::single_var::integration"
+  source: "OpenStax Calculus Vol. 1, §5.4 (CC BY 4.0)"
+
+- stem: "By the Fundamental Theorem of Calculus, if \\(F(x)=\\displaystyle\\int_0^{x} t^2\\,dt\\), what is \\(F'(x)\\)?"
+  choices: ["\\(\\tfrac{x^3}{3}\\)", "\\(x^2\\)", "\\(2x\\)", "\\(x^3\\)", "\\(2x^2\\)"]
+  correct: "B"
+  numeric_answer: ""
+  technique: "ftc-part-1"
+  worked_solution: "FTC Part 1: if \\(F(x)=\\int_a^x f(t)\\,dt\\) with \\(f\\) continuous, then \\(F'(x)=f(x)\\). Here \\(f(t)=t^2\\), so \\(F'(x)=x^2\\)."
+  topic: "calc::single_var::integration"
+  source: "OpenStax Calculus Vol. 1, §5.3 (CC BY 4.0)"
+
+# ---------------------------------------------------------------------------
+# calc::sequences_series  (ets 0.10)
+# ---------------------------------------------------------------------------
+- stem: "Evaluate \\(\\displaystyle\\sum_{n=0}^{\\infty} \\left(\\tfrac{1}{2}\\right)^n\\)."
+  choices: ["1", "\\(\\tfrac{3}{2}\\)", "2", "\\(\\infty\\)", "\\(\\tfrac{1}{2}\\)"]
+  correct: "C"
+  numeric_answer: "2"
+  technique: "geometric-series-sum"
+  worked_solution: "Geometric series with \\(a=1,\\,r=\\tfrac{1}{2}\\), \\(|r|<1\\). Sum \\(=\\frac{a}{1-r}=\\frac{1}{1-1/2}=\\frac{1}{1/2}=2\\)."
+  topic: "calc::sequences_series"
+  source: "OpenStax Calculus Vol. 2, §5.2 (CC BY 4.0)"
+
+- stem: "Which test shows \\(\\displaystyle\\sum_{n=1}^{\\infty}\\frac{1}{n}\\) diverges but \\(\\sum \\frac{1}{n^2}\\) converges?"
+  choices: ["Ratio test", "Root test", "p-series test", "Alternating series test", "Geometric series test"]
+  correct: "C"
+  numeric_answer: ""
+  technique: "p-series-test"
+  worked_solution: "The p-series \\(\\sum \\frac{1}{n^p}\\) converges iff \\(p>1\\). For \\(\\frac{1}{n}\\), \\(p=1\\) so it diverges; for \\(\\frac{1}{n^2}\\), \\(p=2>1\\) so it converges. The ratio and root tests are inconclusive here (limit \\(=1\\))."
+  topic: "calc::sequences_series"
+  source: "OpenStax Calculus Vol. 2, §5.3 (CC BY 4.0)"
+
+- stem: "For which \\(x\\) does the power series \\(\\displaystyle\\sum_{n=0}^{\\infty} \\frac{x^n}{n!}\\) converge?"
+  choices: ["\\(|x|<1\\)", "\\(|x|\\le 1\\)", "only \\(x=0\\)", "all real \\(x\\)", "\\(|x|<e\\)"]
+  correct: "D"
+  numeric_answer: ""
+  technique: "ratio-test-radius"
+  worked_solution: "Ratio test: \\(\\left|\\frac{x^{n+1}/(n+1)!}{x^n/n!}\\right|=\\frac{|x|}{n+1}\\to0<1\\) for every \\(x\\). The series (the Taylor series of \\(e^x\\)) converges for all real \\(x\\); the radius of convergence is \\(\\infty\\)."
+  topic: "calc::sequences_series"
+  source: "OpenStax Calculus Vol. 2, §6.2 (CC BY 4.0)"
+
+- stem: "Evaluate \\(\\displaystyle\\lim_{n\\to\\infty} \\frac{2n+1}{n+3}\\) (the limit of the sequence)."
+  choices: ["0", "\\(\\tfrac{1}{3}\\)", "1", "2", "\\(\\infty\\)"]
+  correct: "D"
+  numeric_answer: "2"
+  technique: "sequence-limit"
+  worked_solution: "Divide numerator and denominator by \\(n\\): \\(\\frac{2+1/n}{1+3/n}\\to\\frac{2+0}{1+0}=2\\)."
+  topic: "calc::sequences_series"
+  source: "OpenStax Calculus Vol. 2, §5.1 (CC BY 4.0)"
+
+- stem: "Does \\(\\displaystyle\\sum_{n=1}^{\\infty}\\frac{(-1)^{n+1}}{n}\\) converge, and if so how?"
+  choices: ["Diverges", "Converges absolutely", "Converges conditionally", "Converges to 0", "Diverges to \\(\\infty\\)"]
+  correct: "C"
+  numeric_answer: ""
+  technique: "alternating-series-test"
+  worked_solution: "The terms \\(\\frac{1}{n}\\) decrease to \\(0\\), so by the Alternating Series Test the series converges. But \\(\\sum\\frac{1}{n}\\) (the absolute values) diverges (harmonic). Convergent but not absolutely convergent = conditional convergence. (Its sum is \\(\\ln 2\\).)"
+  topic: "calc::sequences_series"
+  source: "OpenStax Calculus Vol. 2, §5.5 (CC BY 4.0)"
+
+- stem: "What is the coefficient of \\(x^2\\) in the Taylor series of \\(e^x\\) about \\(0\\)?"
+  choices: ["1", "\\(\\tfrac{1}{2}\\)", "2", "\\(\\tfrac{1}{6}\\)", "0"]
+  correct: "B"
+  numeric_answer: ""
+  technique: "taylor-coefficient"
+  worked_solution: "\\(e^x=\\sum_{n=0}^{\\infty}\\frac{x^n}{n!}\\). The coefficient of \\(x^2\\) is \\(\\frac{1}{2!}=\\frac{1}{2}\\)."
+  topic: "calc::sequences_series"
+  source: "OpenStax Calculus Vol. 2, §6.3 (CC BY 4.0)"
+
+# ---------------------------------------------------------------------------
+# calc::multivar  (ets 0.15 — high weight, 8 problems)
+# ---------------------------------------------------------------------------
+- stem: "For \\(f(x,y)=x^2 y+3y\\), compute \\(\\dfrac{\\partial f}{\\partial x}\\)."
+  choices: ["\\(2xy\\)", "\\(x^2+3\\)", "\\(2xy+3\\)", "\\(2x\\)", "\\(x^2 y\\)"]
+  correct: "A"
+  numeric_answer: ""
+  technique: "partial-derivative"
+  worked_solution: "Treat \\(y\\) as constant. \\(\\frac{\\partial}{\\partial x}(x^2 y)=2xy\\); the term \\(3y\\) has no \\(x\\) so contributes \\(0\\). Thus \\(f_x=2xy\\)."
+  topic: "calc::multivar"
+  source: "OpenStax Calculus Vol. 3, §4.3 (CC BY 4.0)"
+
+- stem: "For \\(f(x,y)=x^2+y^2\\), what is the gradient \\(\\nabla f\\) at \\((1,2)\\)?"
+  choices: ["\\((2,4)\\)", "\\((1,2)\\)", "\\((2,2)\\)", "\\((4,2)\\)", "\\((1,4)\\)"]
+  correct: "A"
+  numeric_answer: ""
+  technique: "gradient-evaluation"
+  worked_solution: "\\(\\nabla f=(f_x,f_y)=(2x,2y)\\). At \\((1,2)\\): \\((2\\cdot1,\\,2\\cdot2)=(2,4)\\)."
+  topic: "calc::multivar"
+  source: "OpenStax Calculus Vol. 3, §4.6 (CC BY 4.0)"
+
+- stem: "For \\(f(x,y)=x^2 y^3\\), compute the mixed partial \\(f_{xy}\\)."
+  choices: ["\\(6xy^2\\)", "\\(2y^3\\)", "\\(3x^2 y^2\\)", "\\(6x^2 y\\)", "\\(2xy^3\\)"]
+  correct: "A"
+  numeric_answer: ""
+  technique: "mixed-partials"
+  worked_solution: "\\(f_x=2x y^3\\). Then \\(f_{xy}=\\frac{\\partial}{\\partial y}(2xy^3)=2x\\cdot3y^2=6xy^2\\). (By Clairaut's theorem this equals \\(f_{yx}\\).)"
+  topic: "calc::multivar"
+  source: "OpenStax Calculus Vol. 3, §4.3 (CC BY 4.0)"
+
+- stem: "The directional derivative of \\(f(x,y)=x^2+y^2\\) at \\((1,0)\\) in the direction of the unit vector \\((0,1)\\) is:"
+  choices: ["2", "0", "1", "\\(\\sqrt{2}\\)", "\\(-2\\)"]
+  correct: "B"
+  numeric_answer: "0"
+  technique: "directional-derivative"
+  worked_solution: "\\(D_{\\mathbf u}f=\\nabla f\\cdot\\mathbf u\\). \\(\\nabla f=(2x,2y)\\), at \\((1,0)\\) gives \\((2,0)\\). Dot with \\((0,1)\\): \\(2\\cdot0+0\\cdot1=0\\)."
+  topic: "calc::multivar"
+  source: "OpenStax Calculus Vol. 3, §4.6 (CC BY 4.0)"
+
+- stem: "Classify the critical point of \\(f(x,y)=x^2+y^2\\)."
+  choices: ["Local maximum", "Local minimum", "Saddle point", "Not a critical point", "Inflection point"]
+  correct: "B"
+  numeric_answer: ""
+  technique: "second-derivative-test-2d"
+  worked_solution: "\\(\\nabla f=(2x,2y)=0\\) only at \\((0,0)\\). Second-derivative test: \\(f_{xx}=2,\\,f_{yy}=2,\\,f_{xy}=0\\); \\(D=f_{xx}f_{yy}-f_{xy}^2=4>0\\) and \\(f_{xx}=2>0\\), so \\((0,0)\\) is a local minimum."
+  topic: "calc::multivar"
+  source: "OpenStax Calculus Vol. 3, §4.7 (CC BY 4.0)"
+
+- stem: "Evaluate the iterated integral \\(\\displaystyle\\int_0^1\\!\\!\\int_0^1 xy\\,dx\\,dy\\)."
+  choices: ["\\(\\tfrac{1}{2}\\)", "\\(\\tfrac{1}{4}\\)", "1", "\\(\\tfrac{1}{3}\\)", "2"]
+  correct: "B"
+  numeric_answer: ""
+  technique: "double-integral"
+  worked_solution: "Inner: \\(\\int_0^1 xy\\,dx=y\\cdot\\frac{x^2}{2}\\big|_0^1=\\frac{y}{2}\\). Outer: \\(\\int_0^1 \\frac{y}{2}\\,dy=\\frac{1}{2}\\cdot\\frac{y^2}{2}\\big|_0^1=\\frac{1}{4}\\)."
+  topic: "calc::multivar"
+  source: "OpenStax Calculus Vol. 3, §5.2 (CC BY 4.0)"
+
+- stem: "Classify the critical point of \\(f(x,y)=x^2-y^2\\) at the origin."
+  choices: ["Local maximum", "Local minimum", "Saddle point", "Not a critical point", "Cannot be determined"]
+  correct: "C"
+  numeric_answer: ""
+  technique: "saddle-point-test"
+  worked_solution: "\\(\\nabla f=(2x,-2y)=0\\) at \\((0,0)\\). \\(f_{xx}=2,\\,f_{yy}=-2,\\,f_{xy}=0\\); \\(D=f_{xx}f_{yy}-f_{xy}^2=(2)(-2)-0=-4<0\\). A negative discriminant means a saddle point."
+  topic: "calc::multivar"
+  source: "OpenStax Calculus Vol. 3, §4.7 (CC BY 4.0)"
+
+- stem: "For \\(f(x,y,z)=xyz\\), compute \\(\\dfrac{\\partial f}{\\partial z}\\)."
+  choices: ["\\(xy\\)", "\\(xz\\)", "\\(yz\\)", "\\(xyz\\)", "\\(x+y\\)"]
+  correct: "A"
+  numeric_answer: ""
+  technique: "partial-derivative"
+  worked_solution: "Treat \\(x,y\\) as constants: \\(\\frac{\\partial}{\\partial z}(xyz)=xy\\)."
+  topic: "calc::multivar"
+  source: "OpenStax Calculus Vol. 3, §4.3 (CC BY 4.0)"
