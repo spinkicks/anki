@@ -127,10 +127,11 @@ calmly. Reuses the frozen SpeedrunService RPCs via @speedrun/data.
 <style>
     /* Design tokens (flat/sharp: no rounded corners, no gradients, no glow). */
     .app {
-        /* Fonts (offline-safe): named fonts first so a bundled OFL woff2 would
-           activate automatically later; strong system fallbacks otherwise. We do
-           NOT fetch fonts from the network (webview must work offline). */
-        --disp: "Space Grotesk", "Segoe UI", system-ui, sans-serif;
+        /* Fonts (offline-safe): Manrope is self-hosted (OFL woff2 bundled in
+           the SvelteKit _app output via base.scss @font-face — 500 body/numerals,
+           800 wordmark/headings); strong system fallbacks otherwise. We do NOT
+           fetch fonts from the network (webview must work offline). */
+        --disp: "Manrope", "Segoe UI", system-ui, sans-serif;
         --mono:
             "IBM Plex Mono", ui-monospace, "Cascadia Mono", "Segoe UI Mono",
             "Roboto Mono", monospace;
@@ -238,7 +239,7 @@ calmly. Reuses the frozen SpeedrunService RPCs via @speedrun/data.
     }
     .startstatus-btn {
         font-family: var(--disp);
-        font-weight: 600;
+        font-weight: 500;
         font-size: 12px;
         letter-spacing: 0.14em;
         text-transform: uppercase;

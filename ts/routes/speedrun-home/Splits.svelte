@@ -83,7 +83,7 @@ License: GNU AGPL, version 3 or later; http://www.gnu.org/licenses/agpl.html
         letter-spacing: 0.28em;
         color: var(--fg);
         text-transform: uppercase;
-        font-weight: 600;
+        font-weight: 800;
     }
     .sort {
         font-family: var(--disp);
@@ -120,7 +120,7 @@ License: GNU AGPL, version 3 or later; http://www.gnu.org/licenses/agpl.html
     }
     .seg .name {
         font-family: var(--disp);
-        font-weight: 700;
+        font-weight: 800;
         font-size: 13px;
         letter-spacing: 0.16em;
         text-transform: uppercase;

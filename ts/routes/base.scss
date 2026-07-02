@@ -1,5 +1,28 @@
 @import "$lib/sass/base";
 
+// Speedrun branding — self-hosted Manrope (OFL). Bundled offline: these
+// relative url()s are processed by Vite and emitted into the SvelteKit
+// _app/immutable/assets output, so they are served with the page bundle on
+// BOTH the Qt webview (_anki/sveltekit/_app/…) and the Android AAR
+// (assets backend/sveltekit/app/…) — no CDN, no extra native asset wiring.
+// License text ships alongside the woff2 at ts/routes/fonts/OFL.txt.
+// 500 = body/numerals, 800 (ExtraBold) = wordmark/headings (see speedrun
+// identity spec). numerals keep font-variant-numeric: tabular-nums at usage.
+@font-face {
+    font-family: "Manrope";
+    font-style: normal;
+    font-weight: 500;
+    font-display: swap;
+    src: url("./fonts/manrope-latin-500.woff2") format("woff2");
+}
+@font-face {
+    font-family: "Manrope";
+    font-style: normal;
+    font-weight: 800;
+    font-display: swap;
+    src: url("./fonts/manrope-latin-800.woff2") format("woff2");
+}
+
 // override Bootstrap transition duration
 $carousel-transition: var(--transition);
 

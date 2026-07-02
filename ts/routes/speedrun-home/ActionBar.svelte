@@ -56,7 +56,7 @@ License: GNU AGPL, version 3 or later; http://www.gnu.org/licenses/agpl.html
     }
     .run {
         font-family: var(--disp);
-        font-weight: 600;
+        font-weight: 500;
         font-size: 14px;
         letter-spacing: 0.16em;
         text-transform: uppercase;

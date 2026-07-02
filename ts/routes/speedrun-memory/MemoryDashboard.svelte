@@ -123,7 +123,9 @@ License: GNU AGPL, version 3 or later; http://www.gnu.org/licenses/agpl.html
 <style>
     /* Design tokens — mirror "The Run" dark palette so Memory matches Home. */
     .memory {
-        --disp: "Space Grotesk", "Segoe UI", system-ui, sans-serif;
+        /* Manrope self-hosted (OFL woff2 bundled offline via base.scss
+           @font-face — 500 body/numerals, 800 headings). Mirrors Home. */
+        --disp: "Manrope", "Segoe UI", system-ui, sans-serif;
         --mono:
             "IBM Plex Mono", ui-monospace, "Cascadia Mono", "Segoe UI Mono",
             "Roboto Mono", monospace;
@@ -161,7 +163,7 @@ License: GNU AGPL, version 3 or later; http://www.gnu.org/licenses/agpl.html
     .titlebar h1 {
         font-family: var(--disp);
         font-size: 18px;
-        font-weight: 700;
+        font-weight: 800;
         letter-spacing: 0.1em;
         text-transform: uppercase;
         color: var(--fg);
@@ -187,7 +189,7 @@ License: GNU AGPL, version 3 or later; http://www.gnu.org/licenses/agpl.html
         font-size: 13px;
     }
     .coverage {
-        font-weight: 600;
+        font-weight: 500;
         color: var(--fg);
         font-size: 13px;
         font-family: var(--disp);
@@ -195,7 +197,7 @@ License: GNU AGPL, version 3 or later; http://www.gnu.org/licenses/agpl.html
     }
     .updated {
         float: right;
-        font-weight: 400;
+        font-weight: 500;
         color: var(--muted);
         font-family: var(--disp);
         font-variant-numeric: tabular-nums;
@@ -253,7 +255,7 @@ License: GNU AGPL, version 3 or later; http://www.gnu.org/licenses/agpl.html
     }
     .scaffolding-note {
         font-size: 0.85em;
-        font-weight: 400;
+        font-weight: 500;
         color: var(--muted);
         font-style: italic;
     }
@@ -296,7 +298,7 @@ License: GNU AGPL, version 3 or later; http://www.gnu.org/licenses/agpl.html
 
     /* Mobile: compact group header */
     .grouphdr td {
-        font-weight: 700;
+        font-weight: 800;
         padding-top: 8px;
         color: var(--fg);
         font-family: var(--disp);

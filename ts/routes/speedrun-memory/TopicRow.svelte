@@ -64,7 +64,7 @@ License: GNU AGPL, version 3 or later; http://www.gnu.org/licenses/agpl.html
     .topic::before {
         content: "TOPIC ";
         font-size: 0.75em;
-        font-weight: 600;
+        font-weight: 500;
         color: var(--muted);
         text-transform: uppercase;
         letter-spacing: 0.06em;
@@ -72,7 +72,7 @@ License: GNU AGPL, version 3 or later; http://www.gnu.org/licenses/agpl.html
     .recall::before {
         content: "RECALL: ";
         font-size: 0.75em;
-        font-weight: 600;
+        font-weight: 500;
         color: var(--muted);
         text-transform: uppercase;
         letter-spacing: 0.06em;
@@ -80,7 +80,7 @@ License: GNU AGPL, version 3 or later; http://www.gnu.org/licenses/agpl.html
     .range::before {
         content: "RANGE (95%): ";
         font-size: 0.75em;
-        font-weight: 600;
+        font-weight: 500;
         color: var(--muted);
         text-transform: uppercase;
         letter-spacing: 0.06em;
@@ -88,7 +88,7 @@ License: GNU AGPL, version 3 or later; http://www.gnu.org/licenses/agpl.html
     .data::before {
         content: "DATA: ";
         font-size: 0.75em;
-        font-weight: 600;
+        font-weight: 500;
         color: var(--muted);
         text-transform: uppercase;
         letter-spacing: 0.06em;
@@ -97,7 +97,7 @@ License: GNU AGPL, version 3 or later; http://www.gnu.org/licenses/agpl.html
     .c-perf::before {
         content: "PERFORMANCE: ";
         font-size: 0.75em;
-        font-weight: 600;
+        font-weight: 500;
         color: var(--muted);
         text-transform: uppercase;
         letter-spacing: 0.06em;
@@ -105,7 +105,7 @@ License: GNU AGPL, version 3 or later; http://www.gnu.org/licenses/agpl.html
     .c-ready::before {
         content: "READINESS: ";
         font-size: 0.75em;
-        font-weight: 600;
+        font-weight: 500;
         color: var(--muted);
         text-transform: uppercase;
         letter-spacing: 0.06em;
