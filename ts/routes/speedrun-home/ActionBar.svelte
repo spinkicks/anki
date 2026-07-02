@@ -8,17 +8,17 @@ License: GNU AGPL, version 3 or later; http://www.gnu.org/licenses/agpl.html
     export let weakestTimed: string | null = null;
 
     // The desktop/Android shell wires the real study-session launch; we expose
-    // onStartRun as a prop. The default fires BOTH bridges (each guarded): the
-    // desktop Qt webview injects `pycmd`, the Android PageFragment injects
-    // `bridgeCommand` — only the platform's existing one runs, and it's a no-op
-    // outside a webview (dev server / tests).
+    // onStartRun as a prop. IMPORTANT: the desktop Qt webview aliases `pycmd`
+    // and `bridgeCommand` to the SAME function (qt/aqt/webview.py:93), so firing
+    // both would dispatch "startrun" TWICE (double reviewer launch). Android
+    // injects only `bridgeCommand`. So fire exactly ONE, preferring `pycmd`;
+    // outside a webview (dev server / tests) both are undefined and it's a no-op.
     export let onStartRun: () => void = () => {
         const g = globalThis as {
             pycmd?: (cmd: string) => void;
             bridgeCommand?: (cmd: string) => void;
         };
-        g.pycmd?.("startrun"); // desktop (Qt AnkiWebView)
-        g.bridgeCommand?.("startrun"); // Android (PageFragment)
+        (g.pycmd ?? g.bridgeCommand)?.("startrun");
     };
 </script>
 
