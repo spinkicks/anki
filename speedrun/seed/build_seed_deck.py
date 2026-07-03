@@ -67,8 +67,23 @@ PROBLEM_MODEL = genanki.Model(
     templates=[
         {
             "name": "Card 1",
+            # Pre-answer confidence buttons (desktop calibration self-bet). Each
+            # fires pycmd("speedrun:conf:<level>"); the desktop reviewer hook
+            # (aqt/speedrun_capture.py) reads the card id from context and logs
+            # the attempt on answer. Anki templates expose NO card-id token, so
+            # the level is the only payload. Inert/harmless on Android (no handler
+            # registered there in the MVP — no persistence, no error).
             "qfmt": "{{Stem}}"
-            '<div style="margin-top:8px;white-space:pre-line">{{Choices}}</div>',
+            '<div style="margin-top:8px;white-space:pre-line">{{Choices}}</div>'
+            '<div style="margin-top:12px;font-size:11px;color:#888">'
+            "How sure are you, before you check?</div>"
+            '<div style="margin-top:4px">'
+            "<button type=\"button\" onclick=\"pycmd('speedrun:conf:sure')\">"
+            "Sure</button> "
+            "<button type=\"button\" onclick=\"pycmd('speedrun:conf:think')\">"
+            "Think</button> "
+            "<button type=\"button\" onclick=\"pycmd('speedrun:conf:guess')\">"
+            "Guess</button></div>",
             "afmt": '{{FrontSide}}<hr id="answer">'
             '<div style="margin-bottom:8px"><b>Answer: {{CorrectAnswer}}</b></div>'
             "{{WorkedSolution}}"
