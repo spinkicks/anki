@@ -113,6 +113,10 @@ import aqt.forms
 from aqt import addcards, addons, browser, editcurrent, filtered_deck  # isort:skip
 from aqt import stats, about, preferences, mediasync  # isort:skip
 from aqt import speedrun  # isort:skip
+from aqt import speedrun_capture  # isort:skip
+
+# Wire the desktop confidence-capture hooks once at import (no reviewer.py edits).
+speedrun_capture.register()
 
 
 class DialogManager:

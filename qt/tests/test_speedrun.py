@@ -269,3 +269,124 @@ def test_build_mini_mock_deck_reuses_existing_no_orphans() -> None:
         assert deck.config.reschedule is True
     finally:
         col.close()
+
+
+# ---- T6: desktop confidence capture (Qt-free parse/guard/reconcile) ----
+
+from aqt import speedrun_capture  # noqa: E402
+
+
+def _problem_notetype(col: Collection):
+    """A note type literally named Speedrun::Problem (matches the seed model)."""
+    mm = col.models
+    # Materialise the stock note types first (a truly fresh collection has none
+    # until something touches models); keeps the DB consistent.
+    mm.current()
+    nt = mm.new(speedrun_capture.PROBLEM_NOTETYPE)
+    mm.add_field(nt, mm.new_field("Stem"))
+    mm.add_field(nt, mm.new_field("Back"))
+    tmpl = mm.new_template("Card 1")
+    tmpl["qfmt"] = "{{Stem}}"
+    tmpl["afmt"] = "{{FrontSide}}<hr>{{Back}}"
+    mm.add_template(nt, tmpl)
+    mm.add(nt)
+    return nt
+
+
+def _add_problem_note(col: Collection, deck_id: DeckId):
+    nt = _problem_notetype(col)
+    note = col.new_note(nt)
+    note.fields[0] = "2+2?"
+    note.tags = ["calc::single_var::integration", "Speedrun::Problem"]
+    col.add_note(note, deck_id)
+    return note.cards()[0]
+
+
+def test_parse_conf_message_valid_and_invalid() -> None:
+    assert speedrun_capture.parse_conf_message("speedrun:conf:sure") == "sure"
+    assert speedrun_capture.parse_conf_message("speedrun:conf:THINK") == "think"
+    assert speedrun_capture.parse_conf_message("speedrun:conf:guess") == "guess"
+    # Not a conf command / unknown level => None (never silently mis-graded).
+    assert speedrun_capture.parse_conf_message("minimock") is None
+    assert speedrun_capture.parse_conf_message("speedrun:conf:bogus") is None
+    assert speedrun_capture.parse_conf_message("speedrun:conf:") is None
+
+
+def test_build_attempt_correct_is_self_rated_ease_ge_3() -> None:
+    good = speedrun_capture.build_attempt(1, 100, "sure", ease=3, ts=5)
+    assert good["correct"] is True and good["cid"] == 1 and good["revlog_id"] == 100
+    easy = speedrun_capture.build_attempt(1, 101, "think", ease=4, ts=5)
+    assert easy["correct"] is True
+    hard = speedrun_capture.build_attempt(1, 102, "guess", ease=2, ts=5)
+    assert hard["correct"] is False
+    again = speedrun_capture.build_attempt(1, 103, "guess", ease=1, ts=5)
+    assert again["correct"] is False
+
+
+def test_is_problem_card_guards_note_type() -> None:
+    col = _empty_col()
+    try:
+        did = col.decks.get_current_id()
+        pcard = _add_problem_note(col, did)
+        assert speedrun_capture.is_problem_card(pcard)
+        # A stock Basic note is NOT a Speedrun::Problem card.
+        basic_nt = col.models.by_name("Basic")
+        assert basic_nt is not None
+        basic = col.new_note(basic_nt)
+        basic.fields[0] = "q"
+        col.add_note(basic, did)
+        assert not speedrun_capture.is_problem_card(basic.cards()[0])
+        assert not speedrun_capture.is_problem_card(None)
+    finally:
+        col.close()
+
+
+def test_append_attempt_dedupes_by_cid_revlog() -> None:
+    col = _empty_col()
+    try:
+        a = speedrun_capture.build_attempt(1, 100, "sure", ease=3, ts=0)
+        speedrun_capture.append_attempt(col, a)
+        speedrun_capture.append_attempt(col, a)  # duplicate key => ignored
+        b = speedrun_capture.build_attempt(1, 101, "guess", ease=1, ts=0)
+        speedrun_capture.append_attempt(col, b)
+        log = col.get_config(speedrun_capture.CALIBRATION_LOG_KEY, [])
+        assert len(log) == 2
+        assert log[0]["level"] == "sure"
+    finally:
+        col.close()
+
+
+def test_reconcile_writes_attempt_after_answer() -> None:
+    # Full desktop path: stash a confidence, answer the card (writes a revlog
+    # row), reconcile => an attempt is logged with the answer's revlog id and the
+    # self-rated outcome. No pending for a card => no write.
+    speedrun_capture._pending.clear()
+    col = _empty_col()
+    try:
+        did = col.decks.get_current_id()
+        pcard = _add_problem_note(col, did)
+        cid = pcard.id
+        # No pending => reconcile is a no-op.
+        assert speedrun_capture.reconcile_answer(col, cid, ease=3) is None
+
+        # Stash a confidence, then answer the card to produce a revlog row.
+        speedrun_capture.stash_pending(cid, "sure")
+        card = col.sched.getCard()
+        assert card is not None and card.id == cid
+        col.sched.answerCard(card, 3)  # Good => self-rated correct
+        attempt = speedrun_capture.reconcile_answer(col, cid, ease=3)
+        assert attempt is not None
+        assert attempt["cid"] == cid
+        assert attempt["level"] == "sure"
+        assert attempt["correct"] is True
+        # revlog id matches the newest revlog row for this card.
+        newest = col.db.scalar(
+            "SELECT id FROM revlog WHERE cid = ? ORDER BY id DESC LIMIT 1", cid
+        )
+        assert attempt["revlog_id"] == newest
+        # Pending was consumed (a second reconcile writes nothing new).
+        assert speedrun_capture.reconcile_answer(col, cid, ease=3) is None
+        log = col.get_config(speedrun_capture.CALIBRATION_LOG_KEY, [])
+        assert len(log) == 1
+    finally:
+        col.close()
