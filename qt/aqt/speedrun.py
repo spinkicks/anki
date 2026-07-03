@@ -2,6 +2,7 @@
 # License: GNU AGPL, version 3 or later; http://www.gnu.org/licenses/agpl.html
 from __future__ import annotations
 
+import json
 from collections.abc import Callable
 from typing import Any
 
@@ -74,7 +75,80 @@ class SpeedrunHome(QDialog):
             self._start_mini_mock()
         elif cmd == "open:memory":
             aqt.dialogs.open("SpeedrunMemory", self.mw)
+        # AI "Generate practice" (The Map lives in this same webview via the
+        # SvelteKit /speedrun-map link, so it shares this bridge). Both handlers
+        # are inert unless the external AI service is enabled+reachable, so the
+        # app's behaviour is UNCHANGED when AI is off.
+        elif cmd == "speedrun:ai:probe":
+            self._ai_probe()
+        elif cmd.startswith("speedrun:gen:"):
+            self._ai_generate(cmd[len("speedrun:gen:") :])
         return False
+
+    # ---- AI "Generate practice" (The Map) ---------------------------------
+
+    def _ai_probe(self) -> None:
+        """Answer the Map's on-mount availability probe. Runs the env check + a
+        short /health GET OFF the UI thread, then pushes the boolean back to the
+        page via ``window.speedrunAiAvailability``. Unreachable/timeout/off =>
+        false => the button stays disabled (zero behaviour change)."""
+        from aqt import speedrun_ai
+        from aqt.operations import QueryOp
+
+        def op(_col: Any) -> bool:
+            return speedrun_ai.is_ai_available()
+
+        def done(available: bool) -> None:
+            self.web.eval(
+                "window.speedrunAiAvailability"
+                f" && window.speedrunAiAvailability({str(bool(available)).lower()});"
+            )
+
+        # Availability is a pure network/env check — it does not touch the
+        # collection, so allow it to run without serialising on the col.
+        QueryOp(
+            parent=self, op=op, success=done
+        ).without_collection().run_in_background()
+
+    def _ai_generate(self, topic: str) -> None:
+        """Handle ``speedrun:gen:<topic_id>``: POST /generate_batch OFF the UI
+        thread, import ONLY the verified problems it returns, then push
+        ``{added, topic}`` (or an error) back to the page via
+        ``window.speedrunGenStatus``. Timeouts/connection errors degrade to an
+        error callback — never a crash."""
+        from aqt import speedrun_ai
+        from aqt.operations import QueryOp
+
+        topic = (topic or "").strip()
+        if not topic:
+            return
+
+        def op(col: Any) -> dict[str, Any]:
+            # run_generate does the network fetch AND the (undoable) import; it
+            # needs the collection for add_note, so this QueryOp uses the col.
+            return speedrun_ai.run_generate(col, topic)
+
+        def done(result: dict[str, Any]) -> None:
+            payload = json.dumps(
+                {
+                    "topic": result.get("topic", topic),
+                    "added": int(result.get("added", 0)),
+                    "error": result.get("error", ""),
+                }
+            )
+            self.web.eval(
+                f"window.speedrunGenStatus && window.speedrunGenStatus({payload});"
+            )
+
+        def failed(exc: Exception) -> None:
+            payload = json.dumps({"topic": topic, "added": 0, "error": str(exc)})
+            self.web.eval(
+                f"window.speedrunGenStatus && window.speedrunGenStatus({payload});"
+            )
+
+        QueryOp(parent=self, op=op, success=done).failure(failed).with_progress(
+            "Generating… (verifying + grounding)"
+        ).run_in_background()
 
     def _start_run(self) -> None:
         # Launch REAL study on the exam deck. When it can't (deck missing, or

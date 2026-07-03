@@ -4,7 +4,13 @@
 import type { ExamProfile, Row } from "@speedrun/data";
 import { describe, expect, test } from "vitest";
 
-import { blastRadius, computeDepths, layoutNodes, masteryColor } from "./graph";
+import {
+    blastRadius,
+    computeDepths,
+    isCoveredLeaf,
+    layoutNodes,
+    masteryColor,
+} from "./graph";
 
 function row(id: string, partial: Partial<Row> = {}): Row {
     return {
@@ -86,6 +92,23 @@ describe("blastRadius", () => {
     });
     test("linear-algebra chain is independent of calculus", () => {
         expect([...blastRadius("la", view.edges)]).toEqual(["la::matrices"]);
+    });
+});
+
+describe("isCoveredLeaf", () => {
+    const view = layoutNodes(rows, profile);
+    const byId = (id: string) => view.nodes.find((n) => n.id === id)!;
+    test("a weighted (non-container) leaf is a covered leaf", () => {
+        expect(isCoveredLeaf(byId("calc::limits"))).toBe(true);
+        expect(isCoveredLeaf(byId("la::matrices"))).toBe(true);
+    });
+    test("a container/root is NOT a covered leaf", () => {
+        expect(isCoveredLeaf(byId("calc"))).toBe(false);
+        expect(isCoveredLeaf(byId("la"))).toBe(false);
+    });
+    test("null/undefined is not a covered leaf", () => {
+        expect(isCoveredLeaf(null)).toBe(false);
+        expect(isCoveredLeaf(undefined)).toBe(false);
     });
 });
 

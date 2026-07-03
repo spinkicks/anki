@@ -8,13 +8,29 @@ mastery; abstaining topics stay grey and show no fabricated number.
 -->
 <script lang="ts">
     import { onMount } from "svelte";
+    import { probeAiAvailability, requestGenerate } from "./ai";
     import { loadMap } from "./data";
-    import { blastRadius, masteryColor, type MapNode, type MapView } from "./graph";
+    import {
+        blastRadius,
+        isCoveredLeaf,
+        masteryColor,
+        type MapNode,
+        type MapView,
+    } from "./graph";
 
     let view: MapView | null = null;
     let loading = true;
     let error = "";
     let selected: string | null = null;
+
+    // AI "Generate practice" state. OFF-by-default: until the desktop probe says
+    // the external AI service is enabled AND reachable, the button is DISABLED
+    // and there is zero behaviour change to the page.
+    let aiAvailable = false;
+    let generating = false;
+    let toast = "";
+    let toastKind: "ok" | "warn" = "ok";
+    let toastTimer: ReturnType<typeof setTimeout> | undefined;
 
     onMount(async () => {
         try {
@@ -25,7 +41,60 @@ mastery; abstaining topics stay grey and show no fabricated number.
         } finally {
             loading = false;
         }
+        // Independent of map load: ask the desktop whether AI is usable. On a
+        // plain preview / Android (no bridge) this resolves false => stays off.
+        try {
+            aiAvailable = await probeAiAvailability();
+        } catch {
+            aiAvailable = false;
+        }
     });
+
+    function showToast(msg: string, kind: "ok" | "warn"): void {
+        toast = msg;
+        toastKind = kind;
+        if (toastTimer) clearTimeout(toastTimer);
+        toastTimer = setTimeout(() => (toast = ""), 6000);
+    }
+
+    // The button is enabled only when AI is available AND a specific covered leaf
+    // is selected. Otherwise it is disabled with a hint explaining what to fix.
+    $: canGenerate = aiAvailable && isCoveredLeaf(selectedNode) && !generating;
+    $: genHint = !aiAvailable
+        ? "Enable AI: set OPENAI_API_KEY + start the speedrun-ai service"
+        : !isCoveredLeaf(selectedNode)
+          ? "Pick a specific covered topic"
+          : "";
+
+    async function generate(): Promise<void> {
+        // Guard: never fire unless the node is a covered leaf and AI is on.
+        if (!aiAvailable || !selectedNode || !isCoveredLeaf(selectedNode) || generating) {
+            return;
+        }
+        const node = selectedNode;
+        generating = true;
+        toast = "";
+        try {
+            const res = await requestGenerate(node.id);
+            // Keep it honest: only claim success when the import returned N>0.
+            if (res.added > 0) {
+                const n = res.added;
+                showToast(
+                    `Added ${n} verified problem${n === 1 ? "" : "s"} to ${node.name}`,
+                    "ok",
+                );
+            } else {
+                showToast(
+                    "Couldn't produce a verified problem — try again",
+                    "warn",
+                );
+            }
+        } catch {
+            showToast("Couldn't produce a verified problem — try again", "warn");
+        } finally {
+            generating = false;
+        }
+    }
 
     $: edges = view?.edges ?? [];
     $: blast = selected ? blastRadius(selected, edges) : new Set<string>();
@@ -163,6 +232,33 @@ mastery; abstaining topics stay grey and show no fabricated number.
                         </div>
                     {/if}
                 </dl>
+
+                <!-- AI "Generate practice". Disabled (with a hint) unless AI is
+                     available AND a covered leaf is selected. Never claims a
+                     success unless the import returned N>0. -->
+                <div class="gen">
+                    <button
+                        class="gen-btn"
+                        disabled={!canGenerate}
+                        title={genHint}
+                        aria-label="Generate 5 practice problems"
+                        on:click={generate}
+                    >
+                        {#if generating}
+                            Generating… (verifying + grounding)
+                        {:else}
+                            ⚡ Generate 5 practice problems
+                        {/if}
+                    </button>
+                    {#if genHint && !generating}
+                        <span class="gen-hint">{genHint}</span>
+                    {/if}
+                    {#if toast}
+                        <span class="toast" class:warn={toastKind === "warn"} role="status">
+                            {toast}
+                        </span>
+                    {/if}
+                </div>
             </aside>
         {/if}
     {/if}
@@ -409,5 +505,53 @@ mastery; abstaining topics stay grey and show no fabricated number.
     .unlock dd {
         font-weight: 500;
         color: var(--muted);
+    }
+    .gen {
+        margin-top: 14px;
+        padding-top: 12px;
+        border-top: 1px solid var(--line);
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 10px;
+    }
+    .gen-btn {
+        background: var(--pace);
+        color: var(--ink);
+        border: 1px solid var(--pace);
+        border-radius: 6px;
+        padding: 10px 14px;
+        min-height: 44px;
+        cursor: pointer;
+        font-family: var(--disp);
+        font-weight: 800;
+        font-size: 13px;
+    }
+    .gen-btn:hover:not(:disabled) {
+        opacity: 0.9;
+    }
+    .gen-btn:disabled {
+        background: transparent;
+        color: var(--muted);
+        border-color: var(--line);
+        cursor: not-allowed;
+    }
+    .gen-hint {
+        color: var(--muted);
+        font-size: 12px;
+    }
+    .toast {
+        font-size: 12px;
+        font-weight: 700;
+        color: #5aa96a;
+        background: rgba(90, 169, 106, 0.12);
+        border: 1px solid rgba(90, 169, 106, 0.35);
+        border-radius: 6px;
+        padding: 6px 10px;
+    }
+    .toast.warn {
+        color: #c9a24a;
+        background: rgba(201, 162, 74, 0.12);
+        border-color: rgba(201, 162, 74, 0.35);
     }
 </style>

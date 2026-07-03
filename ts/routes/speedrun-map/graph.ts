@@ -146,6 +146,17 @@ export function blastRadius(rootId: string, edges: MapEdge[]): Set<string> {
     return out;
 }
 
+/**
+ * A node is a COVERED LEAF iff it is not a container — i.e. one of the weighted
+ * corpus topics the seed bank (and the AI service) can produce problems for.
+ * Container/group nodes (roots like "calc"/"linear_algebra", ets_weight 0) are
+ * NOT coverable: they hold no problems of their own. The "Generate practice"
+ * button is enabled only for covered leaves (and only when AI is available).
+ */
+export function isCoveredLeaf(node: MapNode | null | undefined): boolean {
+    return !!node && !node.isContainer;
+}
+
 /** Muted status color by recall; abstaining/container nodes are neutral grey. */
 export function masteryColor(node: MapNode): string {
     if (node.isContainer) return "#2b333d";
