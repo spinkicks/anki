@@ -36,9 +36,9 @@ pub(crate) fn coverage(all_tags: &[String], required: &[String]) -> (u32, u32) {
 pub(crate) const SESSION_GAP_MS: i64 = 30 * 60 * 1000;
 
 /// Count mini-mock SESSIONS from graded problem-attempt timestamps (epoch-ms).
-/// A session is a maximal run of timestamps with no consecutive gap
-/// >= `SESSION_GAP_MS`; it counts toward the total only if it holds
-/// >= `min_items` attempts. Sorts `times` in place. Read-only w.r.t. the DB.
+/// A session is a maximal run of timestamps with no consecutive gap of at least
+/// `SESSION_GAP_MS`; it counts toward the total only if it holds at least
+/// `min_items` attempts. Sorts `times` in place. Read-only w.r.t. the DB.
 ///
 /// This replaces the old epoch-day bucketing, which collapsed two separate
 /// same-day mini-mocks into one (under-counting the readiness give-up gate).
@@ -225,11 +225,20 @@ pub(crate) fn interleave_reviews_by_weakness(
     weights: &[(String, f64)],
 ) -> Vec<i64> {
     use std::collections::HashMap;
+    // Sanitize NaN at the boundary: a NaN retrievability (corrupt/degenerate FSRS
+    // state) or NaN weight (malformed profile JSON) would make the sort
+    // comparators below non-total, yielding a non-deterministic order.
+    //  - NaN weight -> 0.0 (no weight => no priority, mirrors the missing-topic case).
+    //  - NaN retrievability -> 1.0 (unknown recall => treat as recalled => NOT weak =>
+    //    sorts last), matching the upstream "no memory state => r = 1.0" convention;
+    //    this avoids promoting a card with a corrupt memory state to the front.
     let points = |topic: Option<usize>, r: f64| -> f64 {
         let w = topic
             .and_then(|i| weights.get(i))
             .map(|(_, w)| *w)
             .unwrap_or(0.0);
+        let w = if w.is_nan() { 0.0 } else { w };
+        let r = if r.is_nan() { 1.0 } else { r };
         (1.0 - r) * w
     };
     // Aggregate points per topic => topic run order (desc, tie by index).
@@ -1084,6 +1093,35 @@ mod test {
         // equal points in calc => card_id tiebreak (1 before 3); calc agg > la;
         // interleave: calc(1), la(2), calc(3).
         assert_eq!(a, vec![1, 2, 3]);
+    }
+
+    #[test]
+    fn review_interleave_nan_is_safe_and_deterministic() {
+        // FIX (P3): a NaN retrievability (corrupt FSRS state) or NaN weight
+        // (malformed profile JSON) must not panic and must yield a stable,
+        // deterministic order. NaN retrievability is sanitized to 1.0 (unknown
+        // recall => treated as recalled => NOT weak => sorts to the tail).
+        let weights = vec![("calc".into(), 0.9), ("la".into(), 0.1)];
+        let cards = vec![
+            (1, Some(0), f64::NAN), // NaN r -> r=1.0 -> points 0 (not weak, tail)
+            (2, Some(0), 0.2),      // real weak calc card, highest points (0.72)
+            (3, Some(1), 0.5),      // la card, small points (0.05)
+        ];
+        let a = interleave_reviews_by_weakness(&cards, &weights);
+        let b = interleave_reviews_by_weakness(&cards, &weights);
+        assert_eq!(a, b, "NaN input must not make the order non-deterministic");
+        assert_eq!(a.len(), 3, "every card is retained");
+        assert_eq!(a[0], 2, "the real weakest card leads; NaN card is not weak");
+        assert_eq!(
+            *a.last().unwrap(),
+            1,
+            "the NaN-retrievability card sorts to the tail (treated as recalled)"
+        );
+
+        // A NaN WEIGHT must also be safe (sanitized to 0.0 => no points).
+        let nan_weights = vec![("calc".into(), f64::NAN), ("la".into(), 0.5)];
+        let out = interleave_reviews_by_weakness(&cards, &nan_weights);
+        assert_eq!(out.len(), 3, "NaN weight must not panic or drop cards");
     }
 
     #[test]
@@ -1952,5 +1990,25 @@ mod test {
             out.output
         );
         Ok(())
+    }
+
+    #[test]
+    fn reorder_new_rpc_rejects_unknown_mode() {
+        // FIX (P3): the reorder RPC drives the ablation control, so an
+        // out-of-range mode int must be REJECTED (InvalidInput), not silently
+        // coerced to Full — a bad mode masquerading as the treatment arm would
+        // corrupt the ablation comparison.
+        let mut col = Collection::new();
+        let err = col
+            .reorder_new_by_points_at_stake(anki_proto::speedrun::ReorderNewRequest {
+                deck_id: 1,
+                topic_weights: vec![],
+                mode: 9999, // no AblationMode variant maps to this
+            })
+            .unwrap_err();
+        assert!(
+            matches!(err, crate::error::AnkiError::InvalidInput { .. }),
+            "expected InvalidInput for unknown mode, got {err:?}"
+        );
     }
 }

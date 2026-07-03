@@ -290,8 +290,12 @@ impl crate::services::SpeedrunService for Collection {
             .into_iter()
             .map(|tw| (tw.topic, tw.weight))
             .collect();
-        let mode = anki_proto::speedrun::AblationMode::try_from(input.mode)
-            .unwrap_or(anki_proto::speedrun::AblationMode::Full);
+        // Reject an unrecognized mode instead of silently defaulting to Full:
+        // this RPC drives the ablation control, so a bad mode int must fail
+        // loudly rather than masquerade as the treatment arm.
+        let Ok(mode) = anki_proto::speedrun::AblationMode::try_from(input.mode) else {
+            invalid_input!("unknown AblationMode: {}", input.mode);
+        };
         self.speedrun_reorder_new(DeckId(input.deck_id), weights, mode)
             .map(Into::into)
     }
