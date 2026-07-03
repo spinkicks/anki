@@ -14,6 +14,7 @@ calmly. Reuses the frozen SpeedrunService RPCs via @speedrun/data.
     import { type HomeView, loadHome } from "./data";
     import RunHeader from "./RunHeader.svelte";
     import Splits from "./Splits.svelte";
+    import ReadinessGauge from "./ReadinessGauge.svelte";
     import StatRow from "./StatRow.svelte";
 
     let view: HomeView | null = null;
@@ -153,6 +154,13 @@ calmly. Reuses the frozen SpeedrunService RPCs via @speedrun/data.
             readiness={view.readiness}
             calibration={view.calibration}
         />
+        <ReadinessGauge
+            point={view.readiness.point}
+            lower={view.readiness.lower}
+            upper={view.readiness.upper}
+            abstained={view.readiness.abstained}
+            unlockHuman={view.readiness.unlockHuman}
+        />
         <Splits segments={view.segments} />
         <ActionBar weakestTimed={view.weakestTimed} />
         <div class="foot">
@@ -166,6 +174,7 @@ calmly. Reuses the frozen SpeedrunService RPCs via @speedrun/data.
             Pace reflects your run so far — not a promised outcome; results vary.
         </div>
         <div class="memory-link">
+            <a href="/speedrun-map">THE MAP ▸</a>
             <a href="/speedrun-memory">MEMORY ▸</a>
         </div>
     {/if}
