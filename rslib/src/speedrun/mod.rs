@@ -1,6 +1,8 @@
 // Copyright: Ankitects Pty Ltd and contributors
 // License: GNU AGPL, version 3 or later; http://www.gnu.org/licenses/agpl.html
 
+#[cfg(test)]
+mod ablation;
 pub(crate) mod exam_profile;
 pub(crate) mod service;
 
