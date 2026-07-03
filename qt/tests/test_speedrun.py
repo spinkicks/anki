@@ -323,19 +323,34 @@ def test_build_attempt_correct_is_self_rated_ease_ge_3() -> None:
     assert again["correct"] is False
 
 
+def _add_other_note(col: Collection, deck_id: DeckId):
+    """A card whose note type is NOT Speedrun::Problem (a self-contained custom
+    type, so the test doesn't depend on stock note types being materialised)."""
+    mm = col.models
+    mm.current()
+    nt = mm.new("Speedrun::Declarative")
+    mm.add_field(nt, mm.new_field("Front"))
+    mm.add_field(nt, mm.new_field("Back"))
+    tmpl = mm.new_template("Card 1")
+    tmpl["qfmt"] = "{{Front}}"
+    tmpl["afmt"] = "{{FrontSide}}<hr>{{Back}}"
+    mm.add_template(nt, tmpl)
+    mm.add(nt)
+    note = col.new_note(nt)
+    note.fields[0] = "q"
+    col.add_note(note, deck_id)
+    return note.cards()[0]
+
+
 def test_is_problem_card_guards_note_type() -> None:
     col = _empty_col()
     try:
         did = col.decks.get_current_id()
         pcard = _add_problem_note(col, did)
         assert speedrun_capture.is_problem_card(pcard)
-        # A stock Basic note is NOT a Speedrun::Problem card.
-        basic_nt = col.models.by_name("Basic")
-        assert basic_nt is not None
-        basic = col.new_note(basic_nt)
-        basic.fields[0] = "q"
-        col.add_note(basic, did)
-        assert not speedrun_capture.is_problem_card(basic.cards()[0])
+        # A non-Problem note type is NOT captured.
+        other = _add_other_note(col, did)
+        assert not speedrun_capture.is_problem_card(other)
         assert not speedrun_capture.is_problem_card(None)
     finally:
         col.close()
