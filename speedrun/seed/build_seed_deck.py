@@ -50,6 +50,59 @@ MODEL = genanki.Model(
     # Bundled MathJax rendering is handled by Anki's built-in MathJax on \\( \\).
 )
 
+# LS2 faded worked-example reveal (Huang 2023: lead with worked steps, then FADE
+# support). Pure client JS, no bridge/persistence/scheduling — the answer side
+# renders the WorkedSolution as steps hidden behind "Reveal next step", so the
+# learner attempts each step before seeing it. Steps split on sentence/step
+# boundaries: a period or colon followed by whitespace. This delimiter was
+# ground-truthed against every seed WorkedSolution — 0 of 134 split points fall
+# inside a MathJax \\( \\) span (no in-span period is ever followed by space), so
+# LaTeX is never severed. Graceful degradation: the raw solution is emitted in a
+# <div id="ws-raw"> that the JS reads then replaces; if JS is off, that div (and
+# a <noscript>) show the full solution. WITHIN-card only — cross-rep fading needs
+# schedule state the template cannot read (future upgrade).
+FADED_REVEAL_JS = (
+    "<div id=\"ws-steps\"></div>"
+    "<noscript>{{WorkedSolution}}</noscript>"
+    "<div id=\"ws-raw\" style=\"display:none\">{{WorkedSolution}}</div>"
+    "<script>(function(){"
+    "var raw=document.getElementById('ws-raw');"
+    "var host=document.getElementById('ws-steps');"
+    "if(!raw||!host){return;}"
+    # Split the rendered solution HTML on sentence/step boundaries (period or
+    # colon + whitespace). Lookbehind keeps the terminator on the step. Verified
+    # never to cut a \\( \\) span for the seed content.
+    "var html=raw.innerHTML;"
+    "var parts=html.split(/(?<=[.:])\\s+/).map(function(s){return s.trim();})"
+    ".filter(function(s){return s.length;});"
+    # 0 or 1 step: nothing to fade — just show the whole solution.
+    "if(parts.length<2){host.innerHTML=raw.innerHTML;return;}"
+    "var shown=0;"
+    "var btn=document.createElement('button');"
+    "btn.type='button';"
+    "btn.textContent='Reveal next step';"
+    "btn.style.marginTop='8px';"
+    "function typeset(){"
+    # Re-run MathJax on newly revealed steps (desktop + AnkiDroid both bundle it).
+    "if(window.MathJax&&window.MathJax.typesetPromise){"
+    "window.MathJax.typesetPromise([host]);}}"
+    "function revealNext(){"
+    "if(shown>=parts.length){return;}"
+    "var d=document.createElement('div');"
+    "d.style.marginTop='6px';"
+    "d.innerHTML=parts[shown];"
+    "host.appendChild(d);"
+    "shown++;"
+    "if(shown>=parts.length){"
+    "btn.textContent='All steps revealed';btn.disabled=true;}"
+    "else{btn.textContent='Reveal next step ('+shown+'/'+parts.length+')';}"
+    "typeset();}"
+    "host.appendChild(btn);"
+    "btn.addEventListener('click',revealNext);"
+    "revealNext();"  # reveal the first step immediately (a genuine worked start)
+    "})();</script>"
+)
+
 PROBLEM_MODEL = genanki.Model(
     PROBLEM_MODEL_ID,
     "Speedrun::Problem",
@@ -63,6 +116,13 @@ PROBLEM_MODEL = genanki.Model(
         {"name": "TechniqueTag"},
         {"name": "Source"},
         {"name": "IRTParams"},
+        # LS2 example-first flag (additive; PROBLEM_MODEL_ID unchanged). A content
+        # flag: when non-empty, the qfmt shows the fully worked solution UP FRONT
+        # as a study example (worked-examples-first for weak/novice topics) before
+        # the learner attempts it. Anki conditionals key on non-empty FIELDS (not
+        # tags), so this must be a field for {{#ExampleFirst}} to branch. Populated
+        # per-problem from the YAML `example_first` key (default empty = off).
+        {"name": "ExampleFirst"},
     ],
     templates=[
         {
@@ -75,6 +135,16 @@ PROBLEM_MODEL = genanki.Model(
             # registered there in the MVP — no persistence, no error).
             "qfmt": "{{Stem}}"
             '<div style="margin-top:8px;white-space:pre-line">{{Choices}}</div>'
+            # LS2 example-first: for flagged (weak/novice) items show the fully
+            # worked solution as a study EXAMPLE before the learner attempts it.
+            # Content flag only (non-empty ExampleFirst field) — no scheduling.
+            "{{#ExampleFirst}}"
+            '<div style="margin-top:12px;padding:8px;border-left:3px solid #7aa;'
+            'background:rgba(120,170,170,0.08)">'
+            '<div style="font-size:11px;color:#888;margin-bottom:4px">'
+            "Worked example (study this first, then solve above):</div>"
+            "{{WorkedSolution}}</div>"
+            "{{/ExampleFirst}}"
             '<div style="margin-top:12px;font-size:11px;color:#888">'
             "How sure are you, before you check?</div>"
             '<div style="margin-top:4px">'
@@ -86,8 +156,11 @@ PROBLEM_MODEL = genanki.Model(
             "Guess</button></div>",
             "afmt": '{{FrontSide}}<hr id="answer">'
             '<div style="margin-bottom:8px"><b>Answer: {{CorrectAnswer}}</b></div>'
-            "{{WorkedSolution}}"
-            '<div style="font-size:12px;color:#888;margin-top:8px">'
+            # LS2 faded worked-example: reveal the WorkedSolution one step at a
+            # time (attempt each step before seeing it). Degrades to full solution
+            # when JS is off. See FADED_REVEAL_JS.
+            + FADED_REVEAL_JS
+            + '<div style="font-size:12px;color:#888;margin-top:8px">'
             "Self-grade: rate Good/Easy only if your answer matched the "
             "correct answer above &mdash; Again/Hard if it didn&rsquo;t.</div>"
             '<div style="font-size:12px;color:#888;margin-top:8px">'
@@ -125,6 +198,13 @@ def _format_choices(choices: list[str]) -> str:
     return "\n".join(f"({letter}) {text}" for letter, text in zip(CHOICE_LETTERS, choices))
 
 
+def _truthy(value: object) -> bool:
+    """Interpret a YAML example_first flag (bool, int, or string) as on/off."""
+    if isinstance(value, str):
+        return value.strip().lower() not in ("", "0", "false", "no")
+    return bool(value)
+
+
 def build() -> Path:
     valid_topics = _leaf_topic_ids()
     deck = genanki.Deck(DECK_ID, "Speedrun::GRE Math")
@@ -147,6 +227,13 @@ def build() -> Path:
             raise ValueError(
                 f"problem topic {topic!r} is not a scored leaf in gre_math.json"
             )
+        # LS2 example-first flag: truthy YAML `example_first` -> non-empty field
+        # (so the qfmt {{#ExampleFirst}} conditional fires) plus a discoverable
+        # tag (for filtered-deck searches). Default off = empty field, no tag.
+        example_first = "1" if _truthy(p.get("example_first")) else ""
+        tags = [topic, "Speedrun::Problem"]
+        if example_first:
+            tags.append("Speedrun::ExampleFirst")
         note = genanki.Note(
             model=PROBLEM_MODEL,
             fields=[
@@ -159,10 +246,11 @@ def build() -> Path:
                 p["technique"],
                 p["source"],
                 str(p.get("irt_params", "")),
+                example_first,
             ],
             # hierarchical topic tag + flat Speedrun::Problem tag (engine scores
-            # Performance via tag:Speedrun::Problem).
-            tags=[topic, "Speedrun::Problem"],
+            # Performance via tag:Speedrun::Problem) + optional ExampleFirst tag.
+            tags=tags,
             guid=genanki.guid_for(p["stem"], topic, "problem"),  # distinct salt
         )
         problem_deck.add_note(note)

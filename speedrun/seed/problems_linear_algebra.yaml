@@ -17,6 +17,9 @@
   worked_solution: "A basis is \\(\\{E_{11},E_{12},E_{21},E_{22}\\}\\), the four matrices with a single \\(1\\) entry. These are linearly independent and span all \\(2\\times2\\) matrices, so the dimension is \\(4\\)."
   topic: "linear_algebra::vector_spaces"
   source: "Hefferon, Linear Algebra (free license), Ch. 2"
+  # LS2 worked-examples-first: linear-algebra entry-point (vector spaces) novice
+  # card — show the fully worked example up front before independent attempt.
+  example_first: "1"
 
 - stem: "Are the vectors \\((1,2)\\) and \\((2,4)\\) in \\(\\mathbb{R}^2\\) linearly independent?"
   choices: ["Yes, they form a basis", "No, one is a scalar multiple of the other", "Yes, they are orthogonal", "Only if scaled", "Cannot be determined"]

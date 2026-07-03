@@ -17,6 +17,9 @@
   worked_solution: "Write \\(\\frac{\\sin(3x)}{x}=3\\cdot\\frac{\\sin(3x)}{3x}\\). As \\(x\\to0\\), \\(3x\\to0\\) and \\(\\frac{\\sin(3x)}{3x}\\to1\\) by the standard limit \\(\\lim_{u\\to0}\\frac{\\sin u}{u}=1\\). Hence the limit is \\(3\\cdot1=3\\)."
   topic: "calc::limits"
   source: "OpenStax Calculus Vol. 1, §2.3 (CC BY 4.0)"
+  # LS2 worked-examples-first: calc entry-point (limits) novice card — show the
+  # fully worked example up front before the learner attempts independently.
+  example_first: "1"
 
 - stem: "Evaluate \\(\\displaystyle\\lim_{x\\to\\infty}\\frac{3x^2-5x+1}{2x^2+7}\\)."
   choices: ["0", "\\(\\tfrac{3}{2}\\)", "\\(\\tfrac{2}{3}\\)", "\\(\\infty\\)", "\\(-\\tfrac{5}{7}\\)"]
