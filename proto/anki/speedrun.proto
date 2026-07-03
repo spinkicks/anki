@@ -28,6 +28,12 @@ service SpeedrunService {
   // today (no data => honest). UI wires these as future columns.
   rpc GetPerformanceReadiness(GetPerformanceReadinessRequest)
       returns (PerformanceReadinessResponse);
+  // Read-time calibration of the learner's SELF-RATED accuracy: how well their
+  // pre-answer confidence (Sure/Think/Guess) on Speedrun::Problem attempts
+  // matched the self-graded outcome (button >= 3). Read-only: computes Brier +
+  // ECE + reliability bins from the config-blob attempt log; abstains below the
+  // minimum attempt count (no fabricated numbers). NOT key-checked accuracy.
+  rpc GetCalibration(GetCalibrationRequest) returns (CalibrationResponse);
 }
 
 // Required: get_services() asserts one Backend<Name>Service per <Name>Service.
@@ -188,4 +194,35 @@ message UnlockRequirement {
   string human = 4;
   // Optional topic id when kind == "topic_items" ("" otherwise).
   string topic = 5;
+}
+
+message GetCalibrationRequest {
+  // Topic ids to scope the attempt log to; empty => all logged attempts.
+  repeated string topics = 1;
+  // Minimum logged attempts before a score is reported; 0 => default 20.
+  uint32 min_attempts = 2;
+}
+
+message CalibrationResponse {
+  // Mean squared error of forecast prob vs self-rated outcome (0.0 abstained).
+  double brier = 1;
+  // Expected Calibration Error: attempt-weighted |accuracy - confidence| gap.
+  double ece = 2;
+  // Logged attempts scored (deduped by (cid, revlog_id)).
+  uint32 attempts = 3;
+  // True => below min_attempts; the honest UI withholds the numbers.
+  bool abstained = 4;
+  // rslib version; proves which engine answered.
+  string backend_version = 5;
+  // Reliability-diagram points (one per distinct confidence level).
+  repeated ReliabilityBin bins = 6;
+}
+
+message ReliabilityBin {
+  // The bin's forecast probability (Sure=0.9, Think=0.65, Guess=0.4).
+  double confidence = 1;
+  // Observed self-rated accuracy of attempts in this bin.
+  double accuracy = 2;
+  // Number of attempts in this bin.
+  uint32 n = 3;
 }
