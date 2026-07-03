@@ -73,6 +73,9 @@ PROBLEM_MODEL = genanki.Model(
             '<div style="margin-bottom:8px"><b>Answer: {{CorrectAnswer}}</b></div>'
             "{{WorkedSolution}}"
             '<div style="font-size:12px;color:#888;margin-top:8px">'
+            "Self-grade: rate Good/Easy only if your answer matched the "
+            "correct answer above &mdash; Again/Hard if it didn&rsquo;t.</div>"
+            '<div style="font-size:12px;color:#888;margin-top:8px">'
             "Topic: {{TopicID}} &middot; Technique: {{TechniqueTag}} "
             "&middot; Source: {{Source}}</div>",
         }
