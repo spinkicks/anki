@@ -112,6 +112,39 @@ impl Collection {
             Ok(count)
         })
     }
+
+    /// Read all logged calibration attempts (config-blob), deduped by
+    /// (cid, revlog_id). Missing/invalid key => empty. Read-only.
+    pub(crate) fn speedrun_read_calibration_attempts(
+        &self,
+    ) -> Vec<crate::speedrun::CalibrationAttempt> {
+        let raw: Vec<crate::speedrun::CalibrationAttempt> = self
+            .get_config_optional(crate::speedrun::CALIBRATION_LOG_CONFIG_KEY)
+            .unwrap_or_default();
+        crate::speedrun::dedupe_attempts(raw)
+    }
+
+    /// Append one calibration attempt to the config-blob log, deduped by
+    /// (cid, revlog_id). Light Speedrun-owned config mutation (mirrors the other
+    /// `speedrun:*` config writes); NOT undoable and touches no cards/notes/
+    /// scheduling. A repeated (cid, revlog_id) is a no-op (idempotent capture).
+    pub(crate) fn speedrun_append_calibration_attempt(
+        &mut self,
+        attempt: crate::speedrun::CalibrationAttempt,
+    ) -> Result<()> {
+        let mut log: Vec<crate::speedrun::CalibrationAttempt> = self
+            .get_config_optional(crate::speedrun::CALIBRATION_LOG_CONFIG_KEY)
+            .unwrap_or_default();
+        if log
+            .iter()
+            .any(|a| a.cid == attempt.cid && a.revlog_id == attempt.revlog_id)
+        {
+            return Ok(());
+        }
+        log.push(attempt);
+        self.set_config_json(crate::speedrun::CALIBRATION_LOG_CONFIG_KEY, &log, false)?;
+        Ok(())
+    }
 }
 
 impl crate::services::SpeedrunService for Collection {
@@ -457,9 +490,95 @@ impl crate::services::SpeedrunService for Collection {
             unlock_requirements: unlock,
         })
     }
+
+    fn get_calibration(
+        &mut self,
+        input: anki_proto::speedrun::GetCalibrationRequest,
+    ) -> error::Result<anki_proto::speedrun::CalibrationResponse> {
+        use anki_proto::speedrun::ReliabilityBin;
+
+        use crate::speedrun::brier_score;
+        use crate::speedrun::confidence_to_prob;
+        use crate::speedrun::ece;
+        use crate::speedrun::reliability_bins;
+        use crate::speedrun::MIN_REVIEWS_DEFAULT;
+
+        let min_attempts = if input.min_attempts == 0 {
+            MIN_REVIEWS_DEFAULT
+        } else {
+            input.min_attempts
+        };
+
+        // Read the deduped attempt log, then optionally scope to the requested
+        // topics (empty => all attempts). Topic scoping matches an attempt's card
+        // to the requested topics by the same prefix rule as topic_problem_stats.
+        let mut attempts = self.speedrun_read_calibration_attempts();
+        if !input.topics.is_empty() {
+            let allowed = self.speedrun_calibration_cids_for_topics(&input.topics)?;
+            attempts.retain(|a| allowed.contains(&a.cid));
+        }
+
+        let backend_version = crate::version::version().to_string();
+
+        // Honest abstain: below the threshold we emit NO numbers (all zero) and
+        // no bins — the UI shows "— abstains", never a fabricated Brier/ECE.
+        if (attempts.len() as u32) < min_attempts {
+            return Ok(anki_proto::speedrun::CalibrationResponse {
+                brier: 0.0,
+                ece: 0.0,
+                attempts: attempts.len() as u32,
+                abstained: true,
+                backend_version,
+                bins: Vec::new(),
+            });
+        }
+
+        // (forecast_prob, outcome) pairs. Outcome is the SELF-RATED correctness
+        // (button >= 3, captured at answer time), NOT key-checked accuracy.
+        let pairs: Vec<(f64, u8)> = attempts
+            .iter()
+            .map(|a| (confidence_to_prob(&a.level), a.correct as u8))
+            .collect();
+
+        let bins = reliability_bins(&pairs)
+            .into_iter()
+            .map(|(confidence, accuracy, n)| ReliabilityBin {
+                confidence,
+                accuracy,
+                n,
+            })
+            .collect();
+
+        Ok(anki_proto::speedrun::CalibrationResponse {
+            brier: brier_score(&pairs),
+            ece: ece(&pairs),
+            attempts: attempts.len() as u32,
+            abstained: false,
+            backend_version,
+            bins,
+        })
+    }
 }
 
 impl Collection {
+    /// Set of card ids under any of `topics` (prefix rule) that are
+    /// Speedrun::Problem cards — used to scope the calibration attempt log to a
+    /// topic selection. Read-only.
+    fn speedrun_calibration_cids_for_topics(
+        &mut self,
+        topics: &[String],
+    ) -> error::Result<std::collections::HashSet<i64>> {
+        let mut cids = std::collections::HashSet::new();
+        for topic in topics {
+            let search =
+                format!("(\"tag:{topic}\" OR \"tag:{topic}::*\") \"tag:Speedrun::Problem\"");
+            for cid in self.search_cards(search.as_str(), SortMode::NoOrder)? {
+                cids.insert(cid.0);
+            }
+        }
+        Ok(cids)
+    }
+
     /// Average FSRS retrievability of DECLARATIVE (non-problem) cards under a
     /// topic. Returns (cards_with_data, avg_recall). Batched: one search + one
     /// card scan. Read-only.

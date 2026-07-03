@@ -408,12 +408,140 @@ pub(crate) fn conformal_margin(base: f64, k: f64, n: u32) -> f64 {
     base * (1.0 + k / (n as f64 + 1.0))
 }
 
+// ---- Calibration (LS1 self-bet) ------------------------------------------
+//
+// Confidence -> forecast probability. The learner tags a pre-answer confidence
+// on a Speedrun::Problem attempt; each tag maps to a documented probability so
+// the engine can score how well-calibrated those forecasts are against the
+// SELF-RATED outcome (`button_chosen >= 3`, same honesty rule as
+// `topic_problem_stats`). NOT key-checked accuracy (auto-grade is deferred).
+
+/// Sure => forecast P(correct) = 0.9.
+pub(crate) const CONF_SURE_PROB: f64 = 0.9;
+/// Think => forecast P(correct) = 0.65.
+pub(crate) const CONF_THINK_PROB: f64 = 0.65;
+/// Guess => forecast P(correct) = 0.4.
+pub(crate) const CONF_GUESS_PROB: f64 = 0.4;
+
+/// Map a confidence level label to its forecast probability. Case-insensitive.
+/// Any unrecognised label falls back to Guess (the most conservative bucket) so
+/// a mis-cased or malformed JS message can never inflate confidence.
+pub(crate) fn confidence_to_prob(level: &str) -> f64 {
+    match level.trim().to_ascii_lowercase().as_str() {
+        "sure" => CONF_SURE_PROB,
+        "think" => CONF_THINK_PROB,
+        _ => CONF_GUESS_PROB,
+    }
+}
+
+/// Brier score = mean squared error of the forecast probabilities against the
+/// binary outcomes. `pairs` is (forecast_prob, outcome) with outcome in {0,1}.
+/// Lower is better; 0.0 is perfect. Empty => 0.0 (the caller abstains on the
+/// attempt count, so this value is never surfaced for an empty log).
+pub(crate) fn brier_score(pairs: &[(f64, u8)]) -> f64 {
+    if pairs.is_empty() {
+        return 0.0;
+    }
+    let sum: f64 = pairs
+        .iter()
+        .map(|(p, o)| {
+            let diff = p - *o as f64;
+            diff * diff
+        })
+        .sum();
+    sum / pairs.len() as f64
+}
+
+/// Reliability bins for a calibration plot. Groups `(forecast_prob, outcome)`
+/// attempts by their DISTINCT forecast probability (there are only three
+/// possible values — Sure/Think/Guess — so no width bucketing is needed) and
+/// returns `(confidence, accuracy, n)` per bin, ASCENDING by confidence.
+/// `confidence` = the bin's forecast prob; `accuracy` = mean outcome in the bin.
+pub(crate) fn reliability_bins(pairs: &[(f64, u8)]) -> Vec<(f64, f64, u32)> {
+    use std::collections::BTreeMap;
+    // Key by the forecast prob's bit pattern to bucket exactly-equal forecasts.
+    let mut buckets: BTreeMap<u64, (f64, u32, u32)> = BTreeMap::new();
+    for (p, o) in pairs {
+        let entry = buckets.entry(p.to_bits()).or_insert((*p, 0, 0));
+        entry.1 += *o as u32; // successes
+        entry.2 += 1; // n
+    }
+    buckets
+        .into_values()
+        .map(|(conf, successes, n)| (conf, successes as f64 / n as f64, n))
+        .collect()
+}
+
+/// Expected Calibration Error = Σ (n_bin / N) * |accuracy_bin - confidence_bin|
+/// over the reliability bins. The gap between promised and observed accuracy,
+/// weighted by how many attempts fall in each bin. Lower is better; 0.0 =
+/// perfectly calibrated. Empty => 0.0 (caller abstains on count).
+pub(crate) fn ece(pairs: &[(f64, u8)]) -> f64 {
+    if pairs.is_empty() {
+        return 0.0;
+    }
+    let n_total = pairs.len() as f64;
+    reliability_bins(pairs)
+        .into_iter()
+        .map(|(conf, acc, n)| (n as f64 / n_total) * (acc - conf).abs())
+        .sum()
+}
+
+// ---- Calibration attempt store (config-blob) -----------------------------
+//
+// Attempts are stored as a JSON array under the synced collection config key
+// below (NO revlog/schema change, NO new table). Each attempt records the card,
+// the answer's revlog id (used to dedupe), the confidence level, the self-rated
+// outcome, and a timestamp. Desktop capture (Qt hook) appends here; the read-
+// only GetCalibration RPC reads + dedupes them at read time. Mirrors the other
+// `speedrun:*` config keys (e.g. `speedrun:review_interleave`).
+
+/// Synced-config key holding the JSON array of calibration attempts.
+pub(crate) const CALIBRATION_LOG_CONFIG_KEY: &str = "speedrun:calibration_log";
+
+/// One logged pre-answer confidence attempt on a Speedrun::Problem card.
+/// `correct` is the SELF-RATED outcome (button >= 3), NOT key-checked.
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+pub(crate) struct CalibrationAttempt {
+    /// Card id the attempt was made on.
+    pub cid: i64,
+    /// Revlog id of the answer (the dedupe key together with `cid`).
+    pub revlog_id: i64,
+    /// Confidence level label ("sure" | "think" | "guess").
+    pub level: String,
+    /// Self-rated correctness (button >= 3).
+    pub correct: bool,
+    /// Epoch timestamp (seconds) the attempt was captured.
+    pub ts: i64,
+}
+
+/// Dedupe attempts by `(cid, revlog_id)`, keeping the FIRST occurrence and
+/// preserving input order. A repeated answer write (e.g. a double-fired hook or
+/// a re-answered card reusing a revlog id) must not double-count in the score.
+pub(crate) fn dedupe_attempts(attempts: Vec<CalibrationAttempt>) -> Vec<CalibrationAttempt> {
+    use std::collections::HashSet;
+    let mut seen: HashSet<(i64, i64)> = HashSet::new();
+    let mut out = Vec::with_capacity(attempts.len());
+    for a in attempts {
+        if seen.insert((a.cid, a.revlog_id)) {
+            out.push(a);
+        }
+    }
+    out
+}
+
 #[cfg(test)]
 mod test {
+    use super::brier_score;
+    use super::confidence_to_prob;
     use super::coverage;
+    use super::dedupe_attempts;
+    use super::ece;
+    use super::CalibrationAttempt;
     use super::interleave_by_topic;
     use super::interleave_reviews_by_weakness;
     use super::mean_ci;
+    use super::reliability_bins;
     use super::topic_aggregate;
     use super::topic_index_for_tags;
     use super::wilson_interval;
@@ -528,6 +656,148 @@ mod test {
     fn mean_ci_fewer_than_two_is_full_uncertainty() {
         assert_eq!(mean_ci(&[], 1.96), (0.0, 1.0));
         assert_eq!(mean_ci(&[0.9], 1.96), (0.0, 1.0));
+    }
+
+    #[test]
+    fn confidence_to_prob_maps_the_three_levels() {
+        // Documented module constants: Sure=0.9, Think=0.65, Guess=0.4.
+        assert!((confidence_to_prob("sure") - 0.9).abs() < 1e-9);
+        assert!((confidence_to_prob("think") - 0.65).abs() < 1e-9);
+        assert!((confidence_to_prob("guess") - 0.4).abs() < 1e-9);
+    }
+
+    #[test]
+    fn confidence_to_prob_is_case_insensitive_and_defaults_to_guess() {
+        // Case-insensitive so the JS message level casing can't silently misgrade.
+        assert!((confidence_to_prob("SURE") - 0.9).abs() < 1e-9);
+        // Unknown level => the most conservative bucket (Guess), never a fake high
+        // confidence.
+        assert!((confidence_to_prob("bogus") - 0.4).abs() < 1e-9);
+    }
+
+    #[test]
+    fn brier_score_known_value() {
+        // Perfectly confident and correct on all => 0.
+        let perfect = vec![(1.0_f64, 1u8), (1.0, 1)];
+        assert!((brier_score(&perfect) - 0.0).abs() < 1e-9);
+        // p=0.9 wrong (outcome 0) once, p=0.9 right once:
+        // mean((0.9-0)^2, (0.9-1)^2) = mean(0.81, 0.01) = 0.41.
+        let mixed = vec![(0.9_f64, 0u8), (0.9, 1)];
+        assert!((brier_score(&mixed) - 0.41).abs() < 1e-9);
+    }
+
+    #[test]
+    fn brier_score_empty_is_zero() {
+        // No attempts => 0.0 (caller abstains on count, so the number is unused).
+        assert_eq!(brier_score(&[]), 0.0);
+    }
+
+    #[test]
+    fn reliability_bins_group_by_confidence_level() {
+        // Three attempts at p=0.9 (two correct), two at p=0.4 (one correct).
+        let pairs = vec![
+            (0.9_f64, 1u8),
+            (0.9, 1),
+            (0.9, 0),
+            (0.4, 1),
+            (0.4, 0),
+        ];
+        let bins = reliability_bins(&pairs);
+        // One bin per distinct confidence value, ascending by confidence.
+        assert_eq!(bins.len(), 2);
+        assert!((bins[0].0 - 0.4).abs() < 1e-9);
+        assert_eq!(bins[0].2, 2); // n
+        assert!((bins[0].1 - 0.5).abs() < 1e-9); // accuracy 1/2
+        assert!((bins[1].0 - 0.9).abs() < 1e-9);
+        assert_eq!(bins[1].2, 3);
+        assert!((bins[1].1 - (2.0 / 3.0)).abs() < 1e-9); // accuracy 2/3
+    }
+
+    #[test]
+    fn reliability_bins_single_bin() {
+        let pairs = vec![(0.65_f64, 1u8), (0.65, 0)];
+        let bins = reliability_bins(&pairs);
+        assert_eq!(bins.len(), 1);
+        assert!((bins[0].0 - 0.65).abs() < 1e-9);
+        assert!((bins[0].1 - 0.5).abs() < 1e-9);
+        assert_eq!(bins[0].2, 2);
+    }
+
+    #[test]
+    fn reliability_bins_empty_is_empty() {
+        assert!(reliability_bins(&[]).is_empty());
+    }
+
+    #[test]
+    fn ece_known_value() {
+        // Same data as reliability_bins test: gap 0.4 bin = |0.5-0.4| = 0.1 (n=2);
+        // 0.9 bin = |2/3 - 0.9| = 0.2333.. (n=3). ECE = (2/5)*0.1 + (3/5)*0.2333..
+        // = 0.04 + 0.14 = 0.18.
+        let pairs = vec![
+            (0.9_f64, 1u8),
+            (0.9, 1),
+            (0.9, 0),
+            (0.4, 1),
+            (0.4, 0),
+        ];
+        assert!((ece(&pairs) - 0.18).abs() < 1e-9, "ece={}", ece(&pairs));
+    }
+
+    #[test]
+    fn ece_perfectly_calibrated_is_zero() {
+        // p=0.5, exactly half correct => zero calibration error.
+        let pairs = vec![(0.5_f64, 1u8), (0.5, 0)];
+        assert!((ece(&pairs) - 0.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn ece_empty_is_zero() {
+        assert_eq!(ece(&[]), 0.0);
+    }
+
+    fn attempt(cid: i64, revlog_id: i64, level: &str, correct: bool) -> CalibrationAttempt {
+        CalibrationAttempt {
+            cid,
+            revlog_id,
+            level: level.to_string(),
+            correct,
+            ts: 0,
+        }
+    }
+
+    #[test]
+    fn dedupe_attempts_drops_repeat_cid_revlog_keeping_first() {
+        let attempts = vec![
+            attempt(1, 100, "sure", true),
+            attempt(1, 100, "guess", false), // dup key (1,100) => dropped
+            attempt(1, 101, "think", true),  // same cid, new revlog => kept
+            attempt(2, 100, "sure", false),  // same revlog, new cid => kept
+        ];
+        let out = dedupe_attempts(attempts);
+        assert_eq!(out.len(), 3);
+        // First (1,100) wins => level "sure", not the later "guess".
+        assert_eq!(out[0].level, "sure");
+        assert_eq!(out[1].revlog_id, 101);
+        assert_eq!(out[2].cid, 2);
+    }
+
+    #[test]
+    fn calibration_store_round_trips_and_dedupes() -> Result<()> {
+        let mut col = Collection::new();
+        // Empty log => reads empty.
+        assert!(col.speedrun_read_calibration_attempts().is_empty());
+        // Append two distinct attempts.
+        col.speedrun_append_calibration_attempt(attempt(1, 100, "sure", true))?;
+        col.speedrun_append_calibration_attempt(attempt(1, 101, "guess", false))?;
+        let read = col.speedrun_read_calibration_attempts();
+        assert_eq!(read.len(), 2);
+        assert_eq!(read[0], attempt(1, 100, "sure", true));
+        // Appending a duplicate (cid, revlog_id) is a no-op.
+        col.speedrun_append_calibration_attempt(attempt(1, 100, "think", true))?;
+        let read = col.speedrun_read_calibration_attempts();
+        assert_eq!(read.len(), 2, "duplicate (cid,revlog) must not be added");
+        assert_eq!(read[0].level, "sure", "first write wins");
+        Ok(())
     }
 
     #[test]
@@ -1306,6 +1576,98 @@ mod test {
             "coverage counts only the problem topic: have={}",
             cov.have
         );
+        Ok(())
+    }
+
+    // ---- Calibration RPC (synthetic attempt log) ----
+
+    // Seed `count` synthetic calibration attempts on `cid` at the given level;
+    // `correct` of them self-rated correct. Revlog ids are unique per attempt.
+    fn add_calibration_attempts(
+        col: &mut Collection,
+        cid: i64,
+        level: &str,
+        count: u32,
+        correct: u32,
+    ) {
+        for i in 0..count {
+            col.speedrun_append_calibration_attempt(CalibrationAttempt {
+                cid,
+                revlog_id: (cid * 1_000_000) + i as i64,
+                level: level.to_string(),
+                correct: i < correct,
+                ts: i as i64,
+            })
+            .unwrap();
+        }
+    }
+
+    #[test]
+    fn calibration_abstains_below_min_attempts() -> Result<()> {
+        let mut col = Collection::new();
+        // 5 attempts, default threshold 20 => abstain (no fabricated numbers).
+        add_calibration_attempts(&mut col, 1, "sure", 5, 4);
+        let resp = col.get_calibration(anki_proto::speedrun::GetCalibrationRequest {
+            topics: vec![],
+            min_attempts: 0, // 0 => default 20
+        })?;
+        assert!(resp.abstained, "5 < 20 => abstain");
+        assert_eq!(resp.attempts, 5);
+        assert_eq!(resp.brier, 0.0, "no number emitted while abstaining");
+        assert_eq!(resp.ece, 0.0);
+        assert!(resp.bins.is_empty());
+        assert!(!resp.backend_version.is_empty());
+        Ok(())
+    }
+
+    #[test]
+    fn calibration_scores_above_threshold() -> Result<()> {
+        let mut col = Collection::new();
+        // 20 "sure" (p=0.9) attempts, 18 correct => accuracy 0.9 (perfectly
+        // calibrated for the Sure bucket). Brier = 0.9*(0.9-1)^2 + 0.1*(0.9-0)^2
+        // = 0.09; ECE = |0.9 - 0.9| = 0.
+        add_calibration_attempts(&mut col, 1, "sure", 20, 18);
+        let resp = col.get_calibration(anki_proto::speedrun::GetCalibrationRequest {
+            topics: vec![],
+            min_attempts: 20,
+        })?;
+        assert!(!resp.abstained, "20 >= 20 => scored");
+        assert_eq!(resp.attempts, 20);
+        assert!((resp.brier - 0.09).abs() < 1e-9, "brier={}", resp.brier);
+        assert!((resp.ece - 0.0).abs() < 1e-9, "ece={}", resp.ece);
+        assert_eq!(resp.bins.len(), 1);
+        assert!((resp.bins[0].confidence - 0.9).abs() < 1e-9);
+        assert!((resp.bins[0].accuracy - 0.9).abs() < 1e-9);
+        assert_eq!(resp.bins[0].n, 20);
+        Ok(())
+    }
+
+    #[test]
+    fn calibration_scopes_to_requested_topics() -> Result<()> {
+        // Attempts on a card tagged for topic A are excluded when the request asks
+        // only for topic B, so an out-of-scope card can't score topic B.
+        let topic_a = "calc::single_var::integration";
+        let topic_b = "linear_algebra::eigen";
+        let mut col = Collection::new();
+        let cid_a = add_problem_card(&mut col, topic_a, "prob_a").0;
+        // 20 attempts on the topic-A card only.
+        add_calibration_attempts(&mut col, cid_a, "sure", 20, 18);
+
+        // Requesting topic B => the topic-A attempts are filtered out => abstain.
+        let resp_b = col.get_calibration(anki_proto::speedrun::GetCalibrationRequest {
+            topics: vec![topic_b.into()],
+            min_attempts: 20,
+        })?;
+        assert!(resp_b.abstained, "no topic-B attempts => abstain");
+        assert_eq!(resp_b.attempts, 0);
+
+        // Requesting topic A => the attempts are in scope => scored.
+        let resp_a = col.get_calibration(anki_proto::speedrun::GetCalibrationRequest {
+            topics: vec![topic_a.into()],
+            min_attempts: 20,
+        })?;
+        assert!(!resp_a.abstained);
+        assert_eq!(resp_a.attempts, 20);
         Ok(())
     }
 
