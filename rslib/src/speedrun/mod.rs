@@ -24,9 +24,10 @@ pub(crate) fn coverage(all_tags: &[String], required: &[String]) -> (u32, u32) {
 
 /// Inactivity gap (ms) that separates two mini-mock SESSIONS. Graded
 /// problem-attempt revlog entries closer together than this belong to the same
-/// sitting; a gap >= this starts a new session. 30 minutes: a timed mini-mock is
-/// a short focused burst, so half an hour of no graded attempts reliably marks a
-/// new sitting while still tolerating think-time on a single hard problem.
+/// sitting; a gap >= this starts a new session. 30 minutes: a timed mini-mock
+/// is a short focused burst, so half an hour of no graded attempts reliably
+/// marks a new sitting while still tolerating think-time on a single hard
+/// problem.
 ///
 /// Chosen as a documented module constant rather than a config field: threading
 /// a new field through `ReadinessScoreConfig` + the exam-profile JSON schema +
@@ -176,13 +177,13 @@ pub(crate) fn interleave_by_topic(
 /// FIRST match wins => the highest-priority topic when a card spans several.
 ///
 /// Parent/container tags: a card tagged only with a container (e.g. `calc`, or
-/// an intermediate `calc::single_var` that is NOT itself a weighted key) matches
-/// the nearest ANCESTOR that IS a weighted topic — here `calc` — via the
-/// `T::` prefix branch. It does NOT get promoted to a more specific descendant
-/// leaf it lacks (there'd be no unambiguous choice, and the card genuinely has
-/// no leaf tag). If no weighted topic is an ancestor-or-self of any tag, the
-/// card belongs to NO topic (None) and the caller sends it to the unmatched
-/// tail — never to a wrong / arbitrary bucket.
+/// an intermediate `calc::single_var` that is NOT itself a weighted key)
+/// matches the nearest ANCESTOR that IS a weighted topic — here `calc` — via
+/// the `T::` prefix branch. It does NOT get promoted to a more specific
+/// descendant leaf it lacks (there'd be no unambiguous choice, and the card
+/// genuinely has no leaf tag). If no weighted topic is an ancestor-or-self of
+/// any tag, the card belongs to NO topic (None) and the caller sends it to the
+/// unmatched tail — never to a wrong / arbitrary bucket.
 pub(crate) fn topic_index_for_tags(tags: &[String], weighted: &[(String, f64)]) -> Option<usize> {
     for (i, (topic, _)) in weighted.iter().enumerate() {
         let prefix = format!("{topic}::");
@@ -456,7 +457,8 @@ pub(crate) fn brier_score(pairs: &[(f64, u8)]) -> f64 {
 /// attempts by their DISTINCT forecast probability (there are only three
 /// possible values — Sure/Think/Guess — so no width bucketing is needed) and
 /// returns `(confidence, accuracy, n)` per bin, ASCENDING by confidence.
-/// `confidence` = the bin's forecast prob; `accuracy` = mean outcome in the bin.
+/// `confidence` = the bin's forecast prob; `accuracy` = mean outcome in the
+/// bin.
 pub(crate) fn reliability_bins(pairs: &[(f64, u8)]) -> Vec<(f64, f64, u32)> {
     use std::collections::BTreeMap;
     // Key by the forecast prob's bit pattern to bucket exactly-equal forecasts.
