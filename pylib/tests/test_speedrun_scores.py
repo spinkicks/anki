@@ -58,3 +58,50 @@ def test_performance_scores_after_enough_problem_attempts():
         assert resp.topics[0].performance.abstained
     finally:
         col.close()
+
+
+def test_calibration_abstains_with_no_data():
+    col = getEmptyCol()
+    try:
+        # No logged attempts => abstain honestly (no fabricated Brier/ECE), but
+        # the engine version still round-trips through the Python binding.
+        resp = col.speedrun.calibration(topics=[])
+        assert resp.abstained
+        assert resp.attempts == 0
+        assert resp.brier == 0.0
+        assert resp.ece == 0.0
+        assert len(resp.bins) == 0
+        assert resp.backend_version  # non-empty engine version
+    finally:
+        col.close()
+
+
+def test_calibration_scores_after_enough_attempts():
+    col = getEmptyCol()
+    try:
+        # Seed the config-blob attempt log the same way the desktop capture does
+        # (a plain speedrun:* config write): 20 "sure" attempts, 18 self-rated
+        # correct. Exercises the full proto round-trip through the wrapper.
+        log = [
+            {
+                "cid": 1,
+                "revlog_id": i,
+                "level": "sure",
+                "correct": i < 18,
+                "ts": i,
+            }
+            for i in range(20)
+        ]
+        col.set_config("speedrun:calibration_log", log)
+        resp = col.speedrun.calibration(topics=[], min_attempts=20)
+        assert not resp.abstained
+        assert resp.attempts == 20
+        # Sure=0.9, 18/20 correct => perfectly calibrated bucket: ECE ~ 0.
+        assert abs(resp.brier - 0.09) < 1e-9
+        assert abs(resp.ece - 0.0) < 1e-9
+        assert len(resp.bins) == 1
+        assert abs(resp.bins[0].confidence - 0.9) < 1e-9
+        assert abs(resp.bins[0].accuracy - 0.9) < 1e-9
+        assert resp.bins[0].n == 20
+    finally:
+        col.close()

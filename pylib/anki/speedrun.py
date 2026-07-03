@@ -17,6 +17,7 @@ CoverageResponse = speedrun_pb2.CoverageResponse
 TopicMasteryResponse = speedrun_pb2.TopicMasteryResponse
 ExamProfileResponse = speedrun_pb2.ExamProfileResponse
 PerformanceReadinessResponse = speedrun_pb2.PerformanceReadinessResponse
+CalibrationResponse = speedrun_pb2.CalibrationResponse
 
 
 class SpeedrunManager:
@@ -60,6 +61,18 @@ class SpeedrunManager:
         unlock_requirements). Real, honest, non-AI numbers recomputed from synced
         collection data; abstains until there is enough data. Read-only."""
         return self.col._backend.get_performance_readiness(topics=topics)
+
+    def calibration(
+        self, topics: list[str], min_attempts: int = 20
+    ) -> CalibrationResponse:
+        """Calibration of the learner's SELF-RATED accuracy: Brier + ECE +
+        reliability bins over logged pre-answer confidence (Sure/Think/Guess) on
+        Speedrun::Problem attempts, scored against the self-graded outcome
+        (button >= 3). Read-only; abstains below min_attempts (no fabricated
+        numbers). NOT key-checked accuracy. Empty topics => all logged attempts."""
+        return self.col._backend.get_calibration(
+            topics=topics, min_attempts=min_attempts
+        )
 
     def reorder_new(
         self,
