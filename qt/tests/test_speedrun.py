@@ -502,3 +502,216 @@ def test_reconcile_writes_attempt_after_answer() -> None:
         assert len(log) == 1
     finally:
         col.close()
+
+
+# ---- T9: interactive MCQ auto-grade (BACKEND-authoritative key check) ----
+#
+# Thesis-critical: Performance must be OBJECTIVELY key-checked, not self-rated.
+# A choice click fires pycmd("speedrun:mcq:<LETTER>"); the desktop hook stashes
+# the chosen letter per card id, and on answer reads the card's note
+# CorrectAnswer field to compute `correct` server-side (NEVER trusting a
+# client-sent flag). The attempt is logged to speedrun:mcq_attempts, deduped by
+# (cid, revlog_id) — a NEW key that does not touch speedrun:calibration_log.
+
+
+def _add_mcq_note(col: Collection, deck_id: DeckId, correct_letter: str = "C"):
+    """A Speedrun::Problem note that carries a CorrectAnswer field (the seed
+    model has Stem/Choices/CorrectAnswer/...). The backend reconcile reads this
+    field to key-check the chosen letter, so the fixture must expose it."""
+    mm = col.models
+    mm.current()
+    nt = mm.new(speedrun_capture.PROBLEM_NOTETYPE)
+    mm.add_field(nt, mm.new_field("Stem"))
+    mm.add_field(nt, mm.new_field("Choices"))
+    mm.add_field(nt, mm.new_field("CorrectAnswer"))
+    tmpl = mm.new_template("Card 1")
+    tmpl["qfmt"] = "{{Stem}}"
+    tmpl["afmt"] = "{{FrontSide}}<hr>{{CorrectAnswer}}"
+    mm.add_template(nt, tmpl)
+    mm.add(nt)
+    note = col.new_note(nt)
+    note.fields[0] = "2+2?"
+    note.fields[1] = "(A) 1\n(B) 2\n(C) 4\n(D) 5\n(E) 6"
+    note.fields[2] = correct_letter
+    note.tags = ["calc::single_var", "Speedrun::Problem"]
+    col.add_note(note, deck_id)
+    return note.cards()[0]
+
+
+def test_parse_mcq_message_valid_and_invalid() -> None:
+    assert speedrun_capture.parse_mcq_message("speedrun:mcq:A") == "A"
+    assert speedrun_capture.parse_mcq_message("speedrun:mcq:e") == "E"  # normalised
+    assert speedrun_capture.parse_mcq_message("speedrun:mcq: C ") == "C"  # trimmed
+    # Not an mcq command / letter out of A-E => None (never fabricate a grade).
+    assert speedrun_capture.parse_mcq_message("speedrun:conf:sure") is None
+    assert speedrun_capture.parse_mcq_message("speedrun:mcq:F") is None
+    assert speedrun_capture.parse_mcq_message("speedrun:mcq:") is None
+    assert speedrun_capture.parse_mcq_message("speedrun:mcq:AB") is None
+
+
+def test_build_mcq_attempt_shape_matches_frozen_contract() -> None:
+    a = speedrun_capture.build_mcq_attempt(1, 100, "C", correct=True, ts=5)
+    assert a == {
+        "cid": 1,
+        "revlog_id": 100,
+        "chosen": "C",
+        "correct": True,
+        "ts": 5,
+    }
+    b = speedrun_capture.build_mcq_attempt(2, 200, "A", correct=False, ts=9)
+    assert b["chosen"] == "A" and b["correct"] is False
+
+
+def test_append_mcq_attempt_dedupes_by_cid_revlog_on_new_key() -> None:
+    col = _empty_col()
+    try:
+        a = speedrun_capture.build_mcq_attempt(1, 100, "C", correct=True, ts=0)
+        speedrun_capture.append_mcq_attempt(col, a)
+        speedrun_capture.append_mcq_attempt(col, a)  # duplicate key => ignored
+        b = speedrun_capture.build_mcq_attempt(1, 101, "A", correct=False, ts=0)
+        speedrun_capture.append_mcq_attempt(col, b)
+        log = col.get_config(speedrun_capture.MCQ_ATTEMPTS_KEY, [])
+        assert len(log) == 2
+        assert log[0]["chosen"] == "C"
+        # The MCQ log is a NEW key and must not pollute the calibration log.
+        assert col.get_config(speedrun_capture.CALIBRATION_LOG_KEY, []) == []
+    finally:
+        col.close()
+
+
+def test_reconcile_mcq_computes_correct_from_note_correct_answer() -> None:
+    # Backend-authoritative grade: a matching pick => correct True; a mismatching
+    # pick => False. The grade is read from the note's CorrectAnswer field, NOT
+    # from any client-sent flag.
+    speedrun_capture._pending_mcq.clear()
+    col = _empty_col()
+    try:
+        did = col.decks.get_current_id()
+        pcard = _add_mcq_note(col, did, correct_letter="C")
+        cid = pcard.id
+        speedrun_capture.stash_pending_mcq(cid, "C")  # user picked the right one
+        card = col.sched.getCard()
+        assert card is not None and card.id == cid
+        col.sched.answerCard(card, 3)
+        attempt = speedrun_capture.reconcile_mcq(col, cid)
+        assert attempt is not None
+        assert attempt["cid"] == cid
+        assert attempt["chosen"] == "C"
+        assert attempt["correct"] is True
+        newest = col.db.scalar(
+            "SELECT id FROM revlog WHERE cid = ? ORDER BY id DESC LIMIT 1", cid
+        )
+        assert attempt["revlog_id"] == newest
+        # Consumed: a second reconcile writes nothing new.
+        assert speedrun_capture.reconcile_mcq(col, cid) is None
+        log = col.get_config(speedrun_capture.MCQ_ATTEMPTS_KEY, [])
+        assert len(log) == 1
+    finally:
+        col.close()
+
+
+def test_reconcile_mcq_wrong_pick_is_graded_incorrect() -> None:
+    speedrun_capture._pending_mcq.clear()
+    col = _empty_col()
+    try:
+        did = col.decks.get_current_id()
+        pcard = _add_mcq_note(col, did, correct_letter="C")
+        cid = pcard.id
+        speedrun_capture.stash_pending_mcq(cid, "A")  # user picked wrong
+        card = col.sched.getCard()
+        assert card is not None and card.id == cid
+        col.sched.answerCard(card, 3)  # even a Good self-rate can't fake it
+        attempt = speedrun_capture.reconcile_mcq(col, cid)
+        assert attempt is not None
+        assert attempt["chosen"] == "A"
+        assert attempt["correct"] is False
+    finally:
+        col.close()
+
+
+def test_reconcile_mcq_no_pick_writes_nothing() -> None:
+    # No MCQ click before answering => no MCQ attempt is written (the review
+    # falls back to self-rated calibration only; we never fabricate a grade).
+    speedrun_capture._pending_mcq.clear()
+    col = _empty_col()
+    try:
+        did = col.decks.get_current_id()
+        pcard = _add_mcq_note(col, did, correct_letter="C")
+        cid = pcard.id
+        card = col.sched.getCard()
+        assert card is not None and card.id == cid
+        col.sched.answerCard(card, 3)
+        assert speedrun_capture.reconcile_mcq(col, cid) is None
+        assert col.get_config(speedrun_capture.MCQ_ATTEMPTS_KEY, []) == []
+    finally:
+        col.close()
+
+
+def test_clear_pending_mcq_removes_single_card() -> None:
+    speedrun_capture._pending_mcq.clear()
+    speedrun_capture.stash_pending_mcq(1, "A")
+    speedrun_capture.stash_pending_mcq(2, "B")
+    speedrun_capture.clear_pending_mcq(1)
+    assert 1 not in speedrun_capture._pending_mcq
+    assert speedrun_capture._pending_mcq.get(2) == "B"
+    speedrun_capture.clear_pending_mcq(999)  # absent => no-op
+    assert speedrun_capture._pending_mcq.get(2) == "B"
+
+
+def test_clear_all_pending_mcq_empties_dict() -> None:
+    speedrun_capture._pending_mcq.clear()
+    speedrun_capture.stash_pending_mcq(1, "A")
+    speedrun_capture.stash_pending_mcq(2, "C")
+    speedrun_capture.clear_all_pending_mcq()
+    assert speedrun_capture._pending_mcq == {}
+
+
+def test_clear_pending_mcq_for_note_clears_all_its_cards() -> None:
+    speedrun_capture._pending_mcq.clear()
+    col = _empty_col()
+    try:
+        did = col.decks.get_current_id()
+        pcard = _add_mcq_note(col, did)
+        nid = pcard.nid
+        speedrun_capture.stash_pending_mcq(pcard.id, "C")
+        speedrun_capture.stash_pending_mcq(pcard.id + 12345, "A")  # unrelated card
+        speedrun_capture.clear_pending_mcq_for_note(col, nid)
+        assert pcard.id not in speedrun_capture._pending_mcq
+        assert speedrun_capture._pending_mcq.get(pcard.id + 12345) == "A"
+    finally:
+        col.close()
+
+
+def test_no_stale_mcq_attempt_after_suspend_then_later_answer() -> None:
+    # Suspend clears the MCQ stash, so a later answer with no fresh pick logs
+    # nothing (no fabricated key-check for a choice the user never made).
+    speedrun_capture._pending_mcq.clear()
+    col = _empty_col()
+    try:
+        did = col.decks.get_current_id()
+        pcard = _add_mcq_note(col, did, correct_letter="C")
+        cid = pcard.id
+        speedrun_capture.stash_pending_mcq(cid, "C")
+        speedrun_capture.clear_pending_mcq(cid)  # what the suspend hook does
+        assert cid not in speedrun_capture._pending_mcq
+        card = col.sched.getCard()
+        assert card is not None and card.id == cid
+        col.sched.answerCard(card, 3)
+        assert speedrun_capture.reconcile_mcq(col, cid) is None
+        assert col.get_config(speedrun_capture.MCQ_ATTEMPTS_KEY, []) == []
+    finally:
+        col.close()
+
+
+def test_mcq_answer_side_press_does_not_overwrite_pre_answer_pick() -> None:
+    # The Problem afmt re-renders the qfmt via {{FrontSide}}, so a post-reveal
+    # choice click must NOT overwrite the genuine question-side pick. The
+    # question-state guard is shared with the LS1 confidence path.
+    speedrun_capture._pending_mcq.clear()
+    cid = 42
+    if speedrun_capture.is_question_state("question"):
+        speedrun_capture.stash_pending_mcq(cid, "C")
+    assert speedrun_capture._pending_mcq.get(cid) == "C"
+    if speedrun_capture.is_question_state("answer"):
+        speedrun_capture.stash_pending_mcq(cid, "A")
+    assert speedrun_capture._pending_mcq.get(cid) == "C"

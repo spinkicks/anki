@@ -11,8 +11,18 @@ confidence keyed by card id. When the card is answered,
 just-written revlog id, appending a calibration attempt to the config-blob log
 (``speedrun:calibration_log``) via the collection config API.
 
-``correct`` is the SELF-RATED outcome (ease >= 3, i.e. Good/Easy — the same
-honesty rule as the engine's ``topic_problem_stats``), NOT key-checked accuracy.
+For the confidence log ``correct`` is the SELF-RATED outcome (ease >= 3, i.e.
+Good/Easy — the same honesty rule as the engine's ``topic_problem_stats``).
+
+A SECOND, objective path captures interactive multiple-choice answers: a choice
+click on the question side fires ``pycmd("speedrun:mcq:<LETTER>")``; the same
+hook stashes the chosen letter keyed by card id, and on answer the backend reads
+the card's note ``CorrectAnswer`` field to compute a KEY-CHECKED ``correct``
+(chosen == key). That attempt is appended to a NEW config blob
+(``speedrun:mcq_attempts``), giving a Performance signal that is objectively
+graded, not self-rated. The client only ever sends the chosen letter — the grade
+is never trusted from it. If no choice was clicked before answering, nothing is
+written for this path (the review falls back to self-rated calibration only).
 
 The parse / guard / reconcile logic is factored into pure, Qt-free functions so
 it can be unit-tested with a real ``Collection`` and no ``QApplication`` (see
@@ -43,9 +53,24 @@ PROBLEM_NOTETYPE = "Speedrun::Problem"
 # CALIBRATION_LOG_CONFIG_KEY; a plain speedrun:* config blob, no schema change).
 CALIBRATION_LOG_KEY = "speedrun:calibration_log"
 
+# The multiple-choice letters a Problem card may report. Exactly one of A-E is
+# the key; the seed model's CorrectAnswer field holds that key letter.
+MCQ_LETTERS = ("A", "B", "C", "D", "E")
+
+# Config key holding the JSON interactive-MCQ attempt log. A NEW speedrun:* blob
+# distinct from CALIBRATION_LOG_KEY: this log is the OBJECTIVE, key-checked
+# Performance signal (chosen letter vs the note's CorrectAnswer), not the
+# self-rated calibration log. The engine reads this key (do not rename it).
+MCQ_ATTEMPTS_KEY = "speedrun:mcq_attempts"
+
 # Pending confidence per card id, set when a confidence button is pressed and
 # consumed when that card is answered. Module-level (the reviewer is a singleton).
 _pending: dict[int, str] = {}
+
+# Pending MCQ choice (letter A-E) per card id, set when a choice is clicked on the
+# question side and consumed when that card is answered. Separate from _pending so
+# the self-rated confidence and the key-checked choice never clobber each other.
+_pending_mcq: dict[int, str] = {}
 
 
 def parse_conf_message(message: str) -> Optional[str]:
@@ -57,6 +82,19 @@ def parse_conf_message(message: str) -> Optional[str]:
         return None
     level = message[len(prefix) :].strip().lower()
     return level if level in CONF_LEVELS else None
+
+
+def parse_mcq_message(message: str) -> Optional[str]:
+    """Return the chosen letter from a ``speedrun:mcq:<LETTER>`` message, or None
+    if it isn't a (valid) MCQ command. The letter is upper-cased and must be one
+    of A-E; anything else is rejected (None) so we never fabricate a key-check
+    from a malformed payload. Only the letter travels — the grade is computed
+    backend-side against the note's CorrectAnswer, never trusted from the client."""
+    prefix = "speedrun:mcq:"
+    if not message.startswith(prefix):
+        return None
+    letter = message[len(prefix) :].strip().upper()
+    return letter if letter in MCQ_LETTERS else None
 
 
 def is_problem_card(card: Card | None) -> bool:
@@ -104,6 +142,42 @@ def clear_pending_for_note(col: Collection, nid: int) -> None:
         return
     for cid in card_ids:
         _pending.pop(cid, None)
+
+
+def stash_pending_mcq(cid: int, letter: str) -> None:
+    """Record the pending MCQ choice for a card id (last click wins)."""
+    _pending_mcq[cid] = letter
+
+
+def take_pending_mcq(cid: int) -> Optional[str]:
+    """Pop and return the pending MCQ choice for a card id, or None."""
+    return _pending_mcq.pop(cid, None)
+
+
+def clear_pending_mcq(cid: int) -> None:
+    """Drop any pending MCQ choice for a card id without writing an attempt.
+    Used when a card is buried/suspended before it is answered, so a later
+    answer can't inherit a choice the user never made for that attempt."""
+    _pending_mcq.pop(cid, None)
+
+
+def clear_all_pending_mcq() -> None:
+    """Drop every pending MCQ choice. Used when the Reviewer is closing, so no
+    stash survives to be mis-attached to a future session's answer."""
+    _pending_mcq.clear()
+
+
+def clear_pending_mcq_for_note(col: Collection, nid: int) -> None:
+    """Drop pending MCQ choices for all cards of a note. Mirrors
+    ``clear_pending_for_note``: the note-level bury/suspend hooks pass a NOTE id
+    but ``_pending_mcq`` is keyed by CARD id, so resolve and clear each card.
+    Best-effort: a missing note is a harmless no-op."""
+    try:
+        card_ids = col.get_note(nid).card_ids()
+    except Exception:
+        return
+    for cid in card_ids:
+        _pending_mcq.pop(cid, None)
 
 
 def is_question_state(state: Any) -> bool:
@@ -167,6 +241,74 @@ def reconcile_answer(col: Collection, cid: int, ease: int) -> Optional[dict[str,
     return attempt
 
 
+# ---- Interactive MCQ: BACKEND-authoritative key check ----------------------
+
+
+def build_mcq_attempt(
+    cid: int, revlog_id: int, chosen: str, correct: bool, ts: int
+) -> dict[str, Any]:
+    """Pure builder for one MCQ attempt entry. ``correct`` is the OBJECTIVE,
+    key-checked outcome (chosen == the note's CorrectAnswer), computed by the
+    caller — this builder never derives it from a client-sent flag."""
+    return {
+        "cid": cid,
+        "revlog_id": revlog_id,
+        "chosen": chosen,
+        "correct": correct,
+        "ts": ts,
+    }
+
+
+def append_mcq_attempt(col: Collection, attempt: dict[str, Any]) -> None:
+    """Append one MCQ attempt to the ``speedrun:mcq_attempts`` log, deduped by
+    (cid, revlog_id). Mirrors ``append_attempt`` but writes the NEW MCQ key,
+    never touching ``speedrun:calibration_log``. Idempotent on a repeated key."""
+    log = col.get_config(MCQ_ATTEMPTS_KEY, [])
+    if not isinstance(log, list):
+        log = []
+    key = (attempt["cid"], attempt["revlog_id"])
+    if any((e.get("cid"), e.get("revlog_id")) == key for e in log):
+        return
+    log.append(attempt)
+    col.set_config(MCQ_ATTEMPTS_KEY, log)
+
+
+def correct_answer_for_card(col: Collection, cid: int) -> Optional[str]:
+    """The note's CorrectAnswer key letter (A-E) for a card, upper-cased, or None
+    if the field is absent/blank. This is the AUTHORITATIVE grade source: the
+    backend reads it from the note, never from the client."""
+    try:
+        note = col.get_card(cid).note()
+        key = note["CorrectAnswer"]
+    except Exception:
+        # Missing card/note/field must never crash the answer flow.
+        return None
+    key = key.strip().upper()
+    return key if key in MCQ_LETTERS else None
+
+
+def reconcile_mcq(col: Collection, cid: int) -> Optional[dict[str, Any]]:
+    """Consume any pending MCQ choice for ``cid``, key-check it against the note's
+    CorrectAnswer, and write the attempt. Returns the written attempt (for tests)
+    or None when there was no pending choice / no revlog row / no readable key.
+    The grade is computed here from the note field — never from the client."""
+    chosen = take_pending_mcq(cid)
+    if chosen is None:
+        return None
+    revlog_id = answer_revlog_id(col, cid)
+    if revlog_id is None:
+        return None
+    key = correct_answer_for_card(col, cid)
+    if key is None:
+        # No authoritative key to check against: record nothing rather than
+        # fabricate a (possibly wrong) grade.
+        return None
+    correct = chosen == key
+    attempt = build_mcq_attempt(cid, revlog_id, chosen, correct, int(time.time()))
+    append_mcq_attempt(col, attempt)
+    return attempt
+
+
 # ---- Qt wiring (the only Qt-touching code) --------------------------------
 
 
@@ -177,21 +319,27 @@ def _on_js_message(
 
     if handled[0]:
         return handled
+    # Two Speedrun payloads share these guards: a self-rated confidence bet
+    # (speedrun:conf:<level>) and a key-checked MCQ pick (speedrun:mcq:<LETTER>).
     level = parse_conf_message(message)
-    if level is None:
+    letter = parse_mcq_message(message) if level is None else None
+    if level is None and letter is None:
         return handled
     # Only capture in the Reviewer, and only on Speedrun::Problem cards.
     if not isinstance(context, aqt.reviewer.Reviewer):
         return handled
-    # Only accept a PRE-answer bet: the qfmt confidence buttons re-render on the
+    # Only accept a PRE-answer signal: the qfmt buttons/choices re-render on the
     # answer side ({{FrontSide}}), so a post-reveal click must not overwrite the
-    # genuine question-side confidence.
+    # genuine question-side confidence/pick.
     if not is_question_state(context.state):
         return handled
     card = context.card
     if not is_problem_card(card):
         return handled
-    stash_pending(card.id, level)
+    if level is not None:
+        stash_pending(card.id, level)
+    else:
+        stash_pending_mcq(card.id, letter)
     return (True, None)
 
 
@@ -199,22 +347,31 @@ def _on_answer(reviewer: aqt.reviewer.Reviewer, card: Card, ease: int) -> None:
     if not is_problem_card(card):
         # Clear any stray pending for this card without writing.
         take_pending(card.id)
+        take_pending_mcq(card.id)
         return
     try:
         reconcile_answer(reviewer.mw.col, card.id, ease)
     except Exception:
         # Capture is best-effort; never break the answer flow on a logging error.
         take_pending(card.id)
+    try:
+        # Independent of the confidence log: the key-checked MCQ attempt (if a
+        # choice was clicked this turn) is the objective Performance signal.
+        reconcile_mcq(reviewer.mw.col, card.id)
+    except Exception:
+        take_pending_mcq(card.id)
 
 
 def _on_will_suspend_card(cid: int) -> None:
     # reviewer_will_suspend_card(id: int) — the current card's id.
     clear_pending(cid)
+    clear_pending_mcq(cid)
 
 
 def _on_will_bury_card(cid: int) -> None:
     # reviewer_will_bury_card(id: int) — the current card's id.
     clear_pending(cid)
+    clear_pending_mcq(cid)
 
 
 def _on_will_suspend_note(nid: int) -> None:
@@ -223,6 +380,7 @@ def _on_will_suspend_note(nid: int) -> None:
 
     if mw is not None and mw.col is not None:
         clear_pending_for_note(mw.col, nid)
+        clear_pending_mcq_for_note(mw.col, nid)
 
 
 def _on_will_bury_note(nid: int) -> None:
@@ -231,11 +389,13 @@ def _on_will_bury_note(nid: int) -> None:
 
     if mw is not None and mw.col is not None:
         clear_pending_for_note(mw.col, nid)
+        clear_pending_mcq_for_note(mw.col, nid)
 
 
 def _on_will_end() -> None:
     # reviewer_will_end() — reviewer is closing; no stash may outlive it.
     clear_all_pending()
+    clear_all_pending_mcq()
 
 
 def register() -> None:
