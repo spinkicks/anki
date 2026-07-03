@@ -17,9 +17,6 @@ number), and it shows no percentile (we have no ETS norm table).
 
     const norm = (v: number) =>
         Math.max(0, Math.min(1, (v - GRE_MIN) / (GRE_MAX - GRE_MIN)));
-    // ETS-published population median (interpretive data) — a fixed scale
-    // reference, NOT a computed percentile of this user.
-    const MEDIAN = 680;
     $: lo = norm(lower);
     $: hi = norm(upper);
     $: pt = norm(point);
@@ -36,7 +33,6 @@ number), and it shows no percentile (we have no ETS norm table).
     </div>
 
     <div class="track">
-        <div class="tick" style={`left:${norm(MEDIAN) * 100}%`}></div>
         {#if !abstained}
             <div class="band" style={`left:${lo * 100}%;width:${(hi - lo) * 100}%`}></div>
             <div class="needle" style={`left:${pt * 100}%`}></div>
@@ -45,7 +41,6 @@ number), and it shows no percentile (we have no ETS norm table).
 
     <div class="scale">
         <span>200</span>
-        <span class="mid" style={`left:${norm(MEDIAN) * 100}%`}>median 680</span>
         <span>990</span>
     </div>
 
@@ -97,14 +92,6 @@ number), and it shows no percentile (we have no ETS norm table).
         border: 1px solid var(--line, #232a33);
         border-radius: 3px;
     }
-    .tick {
-        position: absolute;
-        top: -3px;
-        width: 1px;
-        height: 18px;
-        background: var(--muted, #7c8794);
-        opacity: 0.6;
-    }
     .band {
         position: absolute;
         top: 0;
@@ -127,11 +114,6 @@ number), and it shows no percentile (we have no ETS norm table).
         font-size: 11px;
         color: var(--muted, #7c8794);
         font-variant-numeric: tabular-nums;
-    }
-    .scale .mid {
-        position: absolute;
-        transform: translateX(-50%);
-        white-space: nowrap;
     }
     .unlock,
     .rng {
