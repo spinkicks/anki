@@ -16,7 +16,7 @@ import {
     loadRows,
     loadScaffoldSummary,
     type Row,
-    ScoreScale,
+    type ScoreScale,
     type UnlockHint,
 } from "@speedrun/data";
 

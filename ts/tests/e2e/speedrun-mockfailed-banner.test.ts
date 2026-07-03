@@ -28,11 +28,15 @@ for (const vp of WIDTHS) {
         // Collect console errors + failed /_anki/* requests across the run.
         const consoleErrors: string[] = [];
         page.on("console", (msg) => {
-            if (msg.type() === "error") consoleErrors.push(msg.text());
+            if (msg.type() === "error") {
+                consoleErrors.push(msg.text());
+            }
         });
         const failedAnki: string[] = [];
         page.on("requestfailed", (req) => {
-            if (req.url().includes("/_anki/")) failedAnki.push(req.url());
+            if (req.url().includes("/_anki/")) {
+                failedAnki.push(req.url());
+            }
         });
         page.on("response", (resp) => {
             if (resp.url().includes("/_anki/") && resp.status() >= 400) {
