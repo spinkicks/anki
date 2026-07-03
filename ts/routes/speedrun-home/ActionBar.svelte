@@ -45,6 +45,12 @@ License: GNU AGPL, version 3 or later; http://www.gnu.org/licenses/agpl.html
     {:else}
         <div class="next">— begin timing to set a pace</div>
     {/if}
+    <!-- §7c desirable-difficulty note near the MINI-MOCK action: a dip in
+         in-session accuracy is the retrieval effort working, not a failure —
+         static copy, no numbers, so it's honest in every state. -->
+    <div class="next">
+        In-session accuracy may dip — that's the process working.
+    </div>
 </div>
 
 <style>

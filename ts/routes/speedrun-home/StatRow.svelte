@@ -64,6 +64,10 @@ License: GNU AGPL, version 3 or later; http://www.gnu.org/licenses/agpl.html
             <div class="meter">
                 <i style={`width:${Math.round(performance.pct)}%`}></i>
             </div>
+            <!-- §7e D(b) caveat: Performance is scored from the learner's own
+                 Good/Easy self-grade, not interactive answer-checking (which
+                 hasn't landed yet). Consistent with LS1's "self-rated" wording. -->
+            <div class="hint">self-rated · Good/Easy grade</div>
         {/if}
     </div>
     <div class="stat">
@@ -91,6 +95,13 @@ License: GNU AGPL, version 3 or later; http://www.gnu.org/licenses/agpl.html
             <div class="hint">
                 {Math.round(readiness.lower)}–{Math.round(readiness.upper)} (95%)
             </div>
+            <!-- §7a diminishing-returns flag. Gated on readiness.nearCeiling,
+                 which is true ONLY when the score is real (non-abstained) AND
+                 high — so this never renders on abstained/empty state and can't
+                 fabricate a plateau claim on a fresh deck. -->
+            {#if readiness.nearCeiling}
+                <div class="hint">near ceiling · gains slow from here</div>
+            {/if}
         {/if}
     </div>
     <div class="stat">

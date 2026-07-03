@@ -50,7 +50,17 @@ export interface ReadinessHeadline {
     meterPct: number; // point normalized to the 200–990 track, 0..100
     reason: string; // abstain reason ("" when scored)
     unlockHuman: string; // top unlock hint ("" when none/scored)
+    // §7a diminishing-returns flag: true ONLY when Readiness is real (not
+    // abstained) AND sits near the top of the 200–990 band. Gates an honest
+    // "gains slow near the ceiling" note — never rendered on abstained/empty
+    // state, so it can't fabricate a plateau claim on a fresh deck.
+    nearCeiling: boolean;
 }
+
+// Diminishing-returns threshold: within the top of the GRE 200–990 band. At/above
+// this the marginal score gain per unit of study shrinks, so we flag it honestly.
+// 940 ≈ the top ~6% of the scale (meterPct ≈ 94%).
+export const READINESS_CEILING = 940;
 
 // Honest headline Calibration of the learner's SELF-RATED accuracy. `brier`
 // (lower is better) is the primary number; `gapPct` is the ECE reliability gap
@@ -216,6 +226,7 @@ export function buildReadinessHeadline(
             meterPct: 0,
             reason: abstainReason,
             unlockHuman: unlocks.length > 0 ? unlocks[0].human : "",
+            nearCeiling: false,
         };
     }
     const meterPct = Math.max(
@@ -231,6 +242,9 @@ export function buildReadinessHeadline(
         meterPct,
         reason: "",
         unlockHuman: "",
+        // Only real+high scores flag diminishing returns (abstained is handled
+        // above and always returns false — never a plateau claim on empty state).
+        nearCeiling: overall.point >= READINESS_CEILING,
     };
 }
 

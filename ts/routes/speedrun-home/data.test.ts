@@ -4,7 +4,12 @@
 import { type Row, ScoreScale } from "@speedrun/data";
 import { expect, test } from "vitest";
 
-import { buildCalibrationHeadline, buildPerformanceHeadline, buildReadinessHeadline } from "./data";
+import {
+    buildCalibrationHeadline,
+    buildPerformanceHeadline,
+    buildReadinessHeadline,
+    READINESS_CEILING,
+} from "./data";
 
 function leaf(id: string, weight: number): Row {
     return {
@@ -85,6 +90,39 @@ test("readiness headline maps the engine's 200–990 score + meter", () => {
     expect(h.point).toBe(595);
     expect(h.percentile).toBe(61);
     expect(h.meterPct).toBeCloseTo(50); // (595-200)/(990-200)*100
+    // §7a: a mid-band real score does NOT flag diminishing returns.
+    expect(h.nearCeiling).toBe(false);
+});
+
+test("§7a readiness flags diminishing returns only when real AND near the ceiling", () => {
+    // Real score at/above the ceiling threshold -> flag true.
+    const high = {
+        abstained: false,
+        point: READINESS_CEILING,
+        lower: 920,
+        upper: 970,
+        percentile: 98,
+        scale: ScoreScale.GRE_200_990,
+    };
+    expect(buildReadinessHeadline(high, "", []).nearCeiling).toBe(true);
+
+    // Real score just below the threshold -> no flag.
+    const belowThreshold = { ...high, point: READINESS_CEILING - 1 };
+    expect(buildReadinessHeadline(belowThreshold, "", []).nearCeiling).toBe(false);
+});
+
+test("§7a diminishing-returns flag never fires on an abstained (empty) readiness", () => {
+    const overall = {
+        abstained: true,
+        point: 0,
+        lower: 0,
+        upper: 0,
+        percentile: 0,
+        scale: ScoreScale.GRE_200_990,
+    };
+    // Even though point (0) is not "high", the guard is that abstained ALWAYS
+    // returns false — no plateau claim can be fabricated on a fresh deck.
+    expect(buildReadinessHeadline(overall, "Readiness locked", []).nearCeiling).toBe(false);
 });
 
 test("readiness headline abstains with the top unlock hint", () => {

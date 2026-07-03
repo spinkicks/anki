@@ -156,8 +156,14 @@ calmly. Reuses the frozen SpeedrunService RPCs via @speedrun/data.
         <Splits segments={view.segments} />
         <ActionBar weakestTimed={view.weakestTimed} />
         <div class="foot">
+            <!-- §7d abstention framing: make the "we don't guess" ethos explicit
+                 so a "—" cell reads as a deliberate abstain, not missing data. -->
             Speedrun measures what you can recall — not a guessed score. Ranges are 95%
-            intervals; untimed segments abstain by design.
+            intervals; untimed segments show "—" and abstain by design rather than
+            guess.
+            <!-- §7b survivorship-bias one-liner. No goal/timeline UI exists to host
+                 this, so it lives here as a general caveat on the pace framing. -->
+            Pace reflects your run so far — not a promised outcome; results vary.
         </div>
         <div class="memory-link">
             <a href="/speedrun-memory">MEMORY ▸</a>
