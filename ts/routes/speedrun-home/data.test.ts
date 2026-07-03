@@ -4,11 +4,7 @@
 import { type Row, ScoreScale } from "@speedrun/data";
 import { expect, test } from "vitest";
 
-import {
-    buildCalibrationHeadline,
-    buildPerformanceHeadline,
-    buildReadinessHeadline,
-} from "./data";
+import { buildCalibrationHeadline, buildPerformanceHeadline, buildReadinessHeadline } from "./data";
 
 function leaf(id: string, weight: number): Row {
     return {

@@ -3,7 +3,11 @@ Copyright: Ankitects Pty Ltd and contributors
 License: GNU AGPL, version 3 or later; http://www.gnu.org/licenses/agpl.html
 -->
 <script lang="ts">
-    import type { CalibrationHeadline, PerformanceHeadline, ReadinessHeadline } from "./data";
+    import type {
+        CalibrationHeadline,
+        PerformanceHeadline,
+        ReadinessHeadline,
+    } from "./data";
 
     export let coverage: { covered: number; total: number; percent: number };
     // memoryVerified.timed = non-abstained leaves; .total = leaves with data.

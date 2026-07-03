@@ -104,9 +104,8 @@ calmly. Reuses the frozen SpeedrunService RPCs via @speedrun/data.
                          timed mini-mock (e.g. no eligible problem cards). No
                          fake success — tell the user plainly. -->
                     <span class="startstatus-text">
-                        Couldn't start a timed mini-mock — no eligible problems
-                        found. Import or unsuspend the GRE problem bank and try
-                        again.
+                        Couldn't start a timed mini-mock — no eligible problems found.
+                        Import or unsuspend the GRE problem bank and try again.
                     </span>
                     <button
                         class="startstatus-btn"

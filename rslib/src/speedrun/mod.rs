@@ -537,7 +537,6 @@ mod test {
     use super::coverage;
     use super::dedupe_attempts;
     use super::ece;
-    use super::CalibrationAttempt;
     use super::interleave_by_topic;
     use super::interleave_reviews_by_weakness;
     use super::mean_ci;
@@ -545,6 +544,7 @@ mod test {
     use super::topic_aggregate;
     use super::topic_index_for_tags;
     use super::wilson_interval;
+    use super::CalibrationAttempt;
     use super::MASTERY_THRESHOLD_DEFAULT;
     use crate::collection::Collection;
     use crate::decks::DeckId;
@@ -695,13 +695,7 @@ mod test {
     #[test]
     fn reliability_bins_group_by_confidence_level() {
         // Three attempts at p=0.9 (two correct), two at p=0.4 (one correct).
-        let pairs = vec![
-            (0.9_f64, 1u8),
-            (0.9, 1),
-            (0.9, 0),
-            (0.4, 1),
-            (0.4, 0),
-        ];
+        let pairs = vec![(0.9_f64, 1u8), (0.9, 1), (0.9, 0), (0.4, 1), (0.4, 0)];
         let bins = reliability_bins(&pairs);
         // One bin per distinct confidence value, ascending by confidence.
         assert_eq!(bins.len(), 2);
@@ -733,13 +727,7 @@ mod test {
         // Same data as reliability_bins test: gap 0.4 bin = |0.5-0.4| = 0.1 (n=2);
         // 0.9 bin = |2/3 - 0.9| = 0.2333.. (n=3). ECE = (2/5)*0.1 + (3/5)*0.2333..
         // = 0.04 + 0.14 = 0.18.
-        let pairs = vec![
-            (0.9_f64, 1u8),
-            (0.9, 1),
-            (0.9, 0),
-            (0.4, 1),
-            (0.4, 0),
-        ];
+        let pairs = vec![(0.9_f64, 1u8), (0.9, 1), (0.9, 0), (0.4, 1), (0.4, 0)];
         assert!((ece(&pairs) - 0.18).abs() < 1e-9, "ece={}", ece(&pairs));
     }
 
