@@ -14,6 +14,8 @@ License: GNU AGPL, version 3 or later; http://www.gnu.org/licenses/agpl.html
         type Row,
         type TopicScaffoldRow,
     } from "./data";
+    import GapChart from "./GapChart.svelte";
+    import Reliability from "./Reliability.svelte";
     import TopicRow from "./TopicRow.svelte";
 
     let profile: ExamProfile | null = null;
@@ -120,6 +122,10 @@ License: GNU AGPL, version 3 or later; http://www.gnu.org/licenses/agpl.html
                 </tbody>
             {/each}
         </table>
+        {#if profile}
+            <GapChart {rows} {scaffold} />
+            <Reliability {profile} />
+        {/if}
     {/if}
 </div>
 
