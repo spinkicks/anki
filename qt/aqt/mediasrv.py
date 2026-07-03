@@ -772,6 +772,7 @@ exposed_backend_list = [
     "get_topic_mastery",
     "get_exam_profile",
     "get_performance_readiness",
+    "get_calibration",
 ]
 
 
