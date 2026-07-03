@@ -543,6 +543,64 @@ pub(crate) fn dedupe_attempts(attempts: Vec<CalibrationAttempt>) -> Vec<Calibrat
     out
 }
 
+// ---- Interactive MCQ auto-grade (objective correctness) ----
+//
+// The interactive MCQ card JS grades each answer against the note's
+// CorrectAnswer and appends the OBJECTIVE result to a second synced-config JSON
+// array (same shape/plumbing as the calibration log, NO revlog/schema change).
+// The engine reads this blob to let objective correctness OVERRIDE the
+// self-rated (button >= 3) tally in Performance scoring. Backward-compatible:
+// with the key absent, scoring is byte-identical to the self-rated path.
+
+/// Synced-config key holding the JSON array of interactive MCQ auto-grade
+/// attempts. Frozen contract (written by the desktop capture task; read-only
+/// here).
+pub(crate) const MCQ_ATTEMPTS_CONFIG_KEY: &str = "speedrun:mcq_attempts";
+
+/// One auto-graded interactive MCQ attempt on a Speedrun::Problem card.
+/// `correct` is the AUTHORITATIVE backend grade (chosen == the note's
+/// CorrectAnswer), keyed for scoring by `(cid, revlog_id)`.
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+pub(crate) struct McqAttempt {
+    /// Card id the attempt was made on.
+    pub cid: i64,
+    /// Revlog id of the answer (the match key together with `cid`).
+    pub revlog_id: i64,
+    /// The chosen option label ("A".."E"). Recorded for provenance; scoring
+    /// uses only `correct`.
+    #[allow(dead_code)]
+    pub chosen: String,
+    /// Objective correctness (chosen == CorrectAnswer).
+    pub correct: bool,
+    /// Epoch timestamp the attempt was captured.
+    #[allow(dead_code)]
+    pub ts: i64,
+}
+
+/// Build a `(cid, revlog_id) -> correct` lookup from a raw JSON config value,
+/// tolerating a missing/whole-blob-malformed value (=> empty map) AND
+/// per-row junk (rows that don't parse as an `McqAttempt` are skipped, never
+/// panic). On a duplicate `(cid, revlog_id)` the FIRST occurrence wins,
+/// matching `dedupe_attempts`' first-wins semantics.
+pub(crate) fn mcq_lookup_from_value(
+    raw: Option<serde_json::Value>,
+) -> std::collections::HashMap<(i64, i64), bool> {
+    let mut map = std::collections::HashMap::new();
+    // Only a JSON array is meaningful; anything else (missing key, object,
+    // string, number) => empty map => pure self-rated fallback.
+    let Some(serde_json::Value::Array(rows)) = raw else {
+        return map;
+    };
+    for row in rows {
+        // Skip any row that isn't a well-formed McqAttempt (junk row tolerated).
+        if let Ok(a) = serde_json::from_value::<McqAttempt>(row) {
+            // First-wins dedupe on (cid, revlog_id).
+            map.entry((a.cid, a.revlog_id)).or_insert(a.correct);
+        }
+    }
+    map
+}
+
 #[cfg(test)]
 mod test {
     use super::brier_score;
@@ -1473,6 +1531,174 @@ mod test {
         assert_eq!(perf.scale, anki_proto::speedrun::ScoreScale::Unit as i32);
         // gap_delta = declarative recall - problem accuracy; computed (both present).
         assert!(t.gap_delta.abs() <= 1.0, "gap_delta={}", t.gap_delta);
+        Ok(())
+    }
+
+    // ---- MCQ auto-grade: objective correctness overrides self-rating ----
+
+    // The revlog id `add_problem_attempts` assigns to the i-th attempt of a burst
+    // seeded at epoch-day `day` (mirrors that helper's formula exactly). Lets a test
+    // target one specific graded entry with an mcq_attempt keyed by (cid, revlog_id).
+    fn problem_revlog_id(day: i64, i: i64) -> i64 {
+        day * 86_400_000 + i
+    }
+
+    // Seed the frozen `speedrun:mcq_attempts` config blob (JSON array of
+    // {cid,revlog_id,chosen,correct,ts}). Written the same way desktop capture
+    // writes it (a plain `speedrun:*` config write); the engine only READS it.
+    fn set_mcq_attempts(col: &mut Collection, rows: &[(i64, i64, &str, bool)]) {
+        let arr: Vec<serde_json::Value> = rows
+            .iter()
+            .map(|(cid, revlog_id, chosen, correct)| {
+                serde_json::json!({
+                    "cid": cid,
+                    "revlog_id": revlog_id,
+                    "chosen": chosen,
+                    "correct": correct,
+                    "ts": 0,
+                })
+            })
+            .collect();
+        col.set_config_json(super::MCQ_ATTEMPTS_CONFIG_KEY, &arr, false)
+            .unwrap();
+    }
+
+    // Performance accuracy (correct/attempts) for a single topic, via the public
+    // scoring RPC. Asserts the topic scored (didn't abstain) and returns the point.
+    fn topic_performance_point(col: &mut Collection, topic: &str) -> f64 {
+        let resp = col
+            .get_performance_readiness(anki_proto::speedrun::GetPerformanceReadinessRequest {
+                topics: vec![topic.into()],
+            })
+            .unwrap();
+        let perf = resp.topics[0].performance.as_ref().unwrap();
+        assert!(!perf.abstained, "topic must score (>= min attempts)");
+        perf.point
+    }
+
+    #[test]
+    fn mcq_override_down_self_rated_good_but_autograded_wrong_counts_incorrect() -> Result<()> {
+        // The key honesty test: 5 attempts ALL self-rated Good (button 4 => today
+        // 5/5 = 1.0). One backend grade says the first was WRONG => 4/5 = 0.8.
+        let topic = "calc::single_var::integration";
+        let mut col = Collection::new();
+        let pcid = add_problem_card(&mut col, topic, "prob");
+        add_problem_attempts(&mut col, pcid, 5, 5, 5); // all button 4 => self 1.0
+        set_mcq_attempts(&mut col, &[(pcid.0, problem_revlog_id(5, 0), "B", false)]);
+        let point = topic_performance_point(&mut col, topic);
+        assert!(
+            (point - 0.8).abs() < 1e-9,
+            "objective WRONG overrides self-rated Good: expected 4/5=0.8, got {point}"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn mcq_override_up_self_rated_wrong_but_autograded_right_counts_correct() -> Result<()> {
+        // 5 attempts ALL self-rated wrong (button 1 => today 0/5 = 0.0). One backend
+        // grade says the first was RIGHT => 1/5 = 0.2.
+        let topic = "calc::single_var::integration";
+        let mut col = Collection::new();
+        let pcid = add_problem_card(&mut col, topic, "prob");
+        add_problem_attempts(&mut col, pcid, 5, 5, 0); // all button 1 => self 0.0
+        set_mcq_attempts(&mut col, &[(pcid.0, problem_revlog_id(5, 0), "A", true)]);
+        let point = topic_performance_point(&mut col, topic);
+        assert!(
+            (point - 0.2).abs() < 1e-9,
+            "objective RIGHT overrides self-rated wrong: expected 1/5=0.2, got {point}"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn mcq_fallback_uses_self_rating_when_no_attempt_for_entry() -> Result<()> {
+        // No mcq_attempts blob at all => byte-identical to today (button>=3): 4/5.
+        let topic = "calc::single_var::integration";
+        let mut col = Collection::new();
+        let pcid = add_problem_card(&mut col, topic, "prob");
+        add_problem_attempts(&mut col, pcid, 5, 5, 4); // 4 self-rated correct of 5
+        let point = topic_performance_point(&mut col, topic);
+        assert!(
+            (point - 0.8).abs() < 1e-9,
+            "no blob => self-rated 4/5=0.8, got {point}"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn mcq_match_precision_wrong_revlog_or_cid_does_not_apply() -> Result<()> {
+        // An mcq_attempt whose (cid, revlog_id) doesn't match a counted entry must
+        // NOT override it; every entry falls back to self-rating (all correct => 1.0).
+        let topic = "calc::single_var::integration";
+        let mut col = Collection::new();
+        let pcid = add_problem_card(&mut col, topic, "prob");
+        add_problem_attempts(&mut col, pcid, 5, 5, 5); // all self-rated correct
+        set_mcq_attempts(
+            &mut col,
+            &[
+                // Right cid, WRONG revlog_id.
+                (pcid.0, problem_revlog_id(5, 0) + 999, "B", false),
+                // WRONG cid, right revlog_id.
+                (pcid.0 + 999, problem_revlog_id(5, 0), "B", false),
+            ],
+        );
+        let point = topic_performance_point(&mut col, topic);
+        assert!(
+            (point - 1.0).abs() < 1e-9,
+            "non-matching (cid,revlog_id) must not override => self-rated 1.0, got {point}"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn mcq_malformed_or_missing_blob_is_pure_fallback_no_panic() -> Result<()> {
+        let topic = "calc::single_var::integration";
+        let mut col = Collection::new();
+        let pcid = add_problem_card(&mut col, topic, "prob");
+        add_problem_attempts(&mut col, pcid, 5, 5, 5); // all self-rated correct => 1.0
+
+        // Whole-blob junk (not an array of attempts) => ignored, pure fallback (1.0).
+        col.set_config_json(super::MCQ_ATTEMPTS_CONFIG_KEY, &"not an array", false)
+            .unwrap();
+        let point = topic_performance_point(&mut col, topic);
+        assert!(
+            (point - 1.0).abs() < 1e-9,
+            "junk blob => self-rated 1.0, got {point}"
+        );
+
+        // A single JUNK ROW mixed with a valid override: valid row applies, junk
+        // row is ignored, and nothing panics => 4/5 = 0.8.
+        let mixed = serde_json::json!([
+            {"garbage": true},
+            {"cid": pcid.0, "revlog_id": problem_revlog_id(5, 0), "chosen": "C", "correct": false, "ts": 0},
+        ]);
+        col.set_config_json(super::MCQ_ATTEMPTS_CONFIG_KEY, &mixed, false)
+            .unwrap();
+        let point = topic_performance_point(&mut col, topic);
+        assert!(
+            (point - 0.8).abs() < 1e-9,
+            "junk row ignored; valid override flips 1 of 5 => 0.8, got {point}"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn mcq_override_still_abstains_below_min_problem_attempts() -> Result<()> {
+        // Auto-grade changes only the correct tally, NOT the abstain gate: below
+        // min_problem_attempts, Performance still abstains regardless of mcq data.
+        let topic = "calc::single_var::integration";
+        let mut col = Collection::new();
+        let pcid = add_problem_card(&mut col, topic, "prob");
+        add_problem_attempts(&mut col, pcid, 5, 3, 3); // only 3 attempts (< 5)
+        set_mcq_attempts(&mut col, &[(pcid.0, problem_revlog_id(5, 0), "A", true)]);
+        let resp =
+            col.get_performance_readiness(anki_proto::speedrun::GetPerformanceReadinessRequest {
+                topics: vec![topic.into()],
+            })?;
+        assert!(
+            resp.topics[0].performance.as_ref().unwrap().abstained,
+            "3 < min_problem_attempts => still abstains even with mcq data"
+        );
         Ok(())
     }
 

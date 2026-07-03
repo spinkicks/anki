@@ -124,6 +124,21 @@ impl Collection {
         crate::speedrun::dedupe_attempts(raw)
     }
 
+    /// Read the interactive MCQ auto-grade log into a `(cid, revlog_id) ->
+    /// correct` lookup for objective Performance scoring. Mirrors
+    /// `speedrun_read_calibration_attempts`, but reads the blob as a raw JSON
+    /// value so a single malformed ROW is skipped without discarding the whole
+    /// log (get_config_optional would drop everything on any parse error).
+    /// Missing key / whole-blob junk => empty map => pure self-rated fallback.
+    /// Read-only.
+    pub(crate) fn speedrun_read_mcq_attempts(
+        &self,
+    ) -> std::collections::HashMap<(i64, i64), bool> {
+        let raw: Option<serde_json::Value> =
+            self.get_config_optional(crate::speedrun::MCQ_ATTEMPTS_CONFIG_KEY);
+        crate::speedrun::mcq_lookup_from_value(raw)
+    }
+
     /// Append one calibration attempt to the config-blob log, deduped by
     /// (cid, revlog_id). Light Speedrun-owned config mutation (mirrors the
     /// other `speedrun:*` config writes); NOT undoable and touches no
@@ -626,20 +641,35 @@ impl Collection {
     }
 
     /// Problem-card stats under a topic: (graded_attempts, correct, newest_ms).
-    /// "correct" = button_chosen >= 3 (Good/Easy). Batched: one search + one
-    /// revlog scan. Read-only.
+    /// Per graded entry, correctness is the OBJECTIVE interactive-MCQ auto-grade
+    /// when an attempt exists for this `(cid, revlog_id)`, else the self-rated
+    /// `button_chosen >= 3` (Good/Easy). This is the honesty upgrade: a card
+    /// self-rated Good but auto-graded WRONG counts as incorrect (and vice-versa).
+    /// Backward-compatible: with no `speedrun:mcq_attempts` blob the map is empty,
+    /// so every entry falls back and behavior is byte-identical to self-rating.
+    /// `attempts` (every graded entry) is unchanged. Batched: one search + one
+    /// revlog scan + one config read. Read-only.
     fn topic_problem_stats(&mut self, topic: &str) -> error::Result<(u32, u32, i64)> {
         let search = format!("(\"tag:{topic}\" OR \"tag:{topic}::*\") \"tag:Speedrun::Problem\"");
         let guard = self.search_cards_into_table(search.as_str(), SortMode::NoOrder)?;
         let revlog = guard.col.storage.get_revlog_entries_for_searched_cards()?;
         drop(guard);
+        // (cid, revlog_id) -> objective correctness. Empty when the blob is
+        // absent/malformed => pure self-rated fallback (see reader).
+        let mcq = self.speedrun_read_mcq_attempts();
         let mut attempts = 0u32;
         let mut correct = 0u32;
         let mut newest = 0i64;
         for entry in &revlog {
             if entry.has_rating_and_affects_scheduling() {
                 attempts += 1;
-                if entry.button_chosen >= 3 {
+                // Objective auto-grade overrides self-rating when present for this
+                // exact (cid, revlog_id); otherwise fall back to button >= 3.
+                let is_correct = match mcq.get(&(entry.cid.0, entry.id.0)) {
+                    Some(&graded) => graded,
+                    None => entry.button_chosen >= 3,
+                };
+                if is_correct {
                     correct += 1;
                 }
                 newest = newest.max(entry.id.0);
