@@ -1,6 +1,10 @@
 <!-- SPEEDRUN FORK NOTE -->
 
-> **This is a fork used by the Speedrun project** — an honest GRE Mathematics Subject Test trainer built **on Anki** (desktop + Android sharing one Rust engine). The Speedrun engine change lives in **`rslib/src/speedrun/`** and `proto/anki/speedrun.proto`; the desktop UI is in `ts/routes/speedrun-*` (Svelte) + `qt/aqt/speedrun.py`. Project hub (docs, run steps, plan): `spinkicks/speedrun`. All credit for the underlying engine goes to Anki; the original Anki README follows.
+> **Speedrun fork** — honest GRE Mathematics Subject Test trainer on Anki (desktop + Android, one shared Rust engine).
+> **Engine:** `rslib/src/speedrun/` + append-only `proto/anki/speedrun.proto` — topic mastery (Wilson CI + abstention), Performance & Readiness scores (IRT→200–990, conformal range, give-up rule), points-at-stake new-card reorder + due-card weakness×topic interleave (`AblationMode` Full/FeatureOff/Plain), `Speedrun::Problem` MCQ bank + timed mini-mock, LS1 calibration (`GetCalibration`).
+> **UI:** shared SvelteKit pages (`ts/routes/speedrun-*`) + Qt shell (`qt/aqt/speedrun*.py`); Manrope wordmark + near-white `#F4F7FA` accent.
+> **Run:** `just run` (Speedrun Home auto-opens) · tests: `cargo test -p anki speedrun::`
+> **Project hub (docs, AI service, eval):** https://github.com/spinkicks/speedrun · **Upstream credit:** Anki README below.
 
 ---
 
