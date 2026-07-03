@@ -152,6 +152,7 @@ calmly. Reuses the frozen SpeedrunService RPCs via @speedrun/data.
             memoryVerified={view.memoryVerified}
             performance={view.performance}
             readiness={view.readiness}
+            calibration={view.calibration}
         />
         <Splits segments={view.segments} />
         <ActionBar weakestTimed={view.weakestTimed} />

@@ -1,7 +1,13 @@
 // Copyright: Ankitects Pty Ltd and contributors
 // License: GNU AGPL, version 3 or later; http://www.gnu.org/licenses/agpl.html
 import { ScoreScale } from "@generated/anki/speedrun_pb";
-import { getCoverage, getExamProfile, getPerformanceReadiness, getTopicMastery } from "@generated/backend";
+import {
+    getCalibration,
+    getCoverage,
+    getExamProfile,
+    getPerformanceReadiness,
+    getTopicMastery,
+} from "@generated/backend";
 
 // Re-export so consumers (Svelte components, tests) can key band rendering off
 // the scale without reaching into @generated directly.
@@ -222,4 +228,67 @@ export async function loadScaffoldSummary(
 ): Promise<ScaffoldSummary> {
     const resp = await loadScaffold(profile);
     return mapScaffoldResponse(resp as unknown as ScaffoldResponseLike);
+}
+
+// CALIBRATION of the learner's SELF-RATED accuracy (NOT key-checked). Brier +
+// ECE + reliability bins over logged pre-answer confidence on problem attempts.
+// Abstains below the engine's attempt threshold — the UI must never fabricate a
+// Brier/ECE number.
+
+// One reliability-diagram point (proto ReliabilityBin).
+export interface ReliabilityBin {
+    confidence: number;
+    accuracy: number;
+    n: number;
+}
+
+// The Home "Calibration" headline. `brier` (lower is better) is the primary
+// number; `ece` is the attempt-weighted reliability gap shown as a sub-hint.
+// Defaults are honest: abstained=true, zeros, no bins.
+export interface CalibrationHeadline {
+    abstained: boolean;
+    brier: number;
+    ece: number;
+    attempts: number;
+    bins: ReliabilityBin[];
+}
+
+// Structural (duck-typed) shape of the proto CalibrationResponse. The generated
+// class satisfies this; tests build plain objects against it. All optional so
+// the mapper stays tolerant of missing fields (=> honest abstain).
+export interface CalibrationResponseLike {
+    brier?: number;
+    ece?: number;
+    attempts?: number;
+    abstained?: boolean;
+    backendVersion?: string;
+    bins?: { confidence?: number; accuracy?: number; n?: number }[];
+}
+
+// Pure mapping of CalibrationResponse -> CalibrationHeadline. Missing fields =>
+// honest abstain (abstained defaults true, numbers zero, no bins).
+export function mapCalibrationResponse(
+    resp: CalibrationResponseLike,
+): CalibrationHeadline {
+    return {
+        abstained: resp.abstained ?? true,
+        brier: resp.brier ?? 0,
+        ece: resp.ece ?? 0,
+        attempts: resp.attempts ?? 0,
+        bins: (resp.bins ?? []).map((b) => ({
+            confidence: b.confidence ?? 0,
+            accuracy: b.accuracy ?? 0,
+            n: b.n ?? 0,
+        })),
+    };
+}
+
+// Calibration loader (Home caller). Scoped to the profile's weighted leaf topics
+// so the number reflects exam-relevant problems; empty topics => all attempts.
+export async function loadCalibration(
+    profile: ExamProfile,
+): Promise<CalibrationHeadline> {
+    const leafIds = profile.topics.filter((t) => t.ets_weight > 0).map((t) => t.id);
+    const resp = await getCalibration({ topics: leafIds, minAttempts: 0 });
+    return mapCalibrationResponse(resp as unknown as CalibrationResponseLike);
 }

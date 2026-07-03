@@ -4,7 +4,12 @@
 import { ScoreScale } from "@generated/anki/speedrun_pb";
 import { expect, test } from "vitest";
 
-import { mapScaffoldResponse, type ScaffoldResponseLike } from "./data";
+import {
+    type CalibrationResponseLike,
+    mapCalibrationResponse,
+    mapScaffoldResponse,
+    type ScaffoldResponseLike,
+} from "./data";
 
 // A real (non-abstained) UNIT Performance cell + an abstaining scaled Readiness
 // (this mirrors what the engine emits per-topic: Readiness abstains per-topic,
@@ -120,4 +125,34 @@ test("carries unlock requirements + abstain reason when readiness locks", () => 
     expect(summary.abstainReason).toBe("Readiness locked until the give-up rule is met");
     expect(summary.unlockRequirements[0].human).toBe("Complete 3 more timed mini-mock(s)");
     expect(summary.unlockRequirements[0].kind).toBe("mini_mocks");
+});
+
+test("maps a scored CalibrationResponse through the boundary", () => {
+    const resp: CalibrationResponseLike = {
+        abstained: false,
+        brier: 0.09,
+        ece: 0.0,
+        attempts: 20,
+        backendVersion: "test",
+        bins: [{ confidence: 0.9, accuracy: 0.9, n: 20 }],
+    };
+    const h = mapCalibrationResponse(resp);
+    expect(h.abstained).toBe(false);
+    expect(h.brier).toBeCloseTo(0.09);
+    expect(h.ece).toBeCloseTo(0.0);
+    expect(h.attempts).toBe(20);
+    expect(h.bins).toHaveLength(1);
+    expect(h.bins[0].confidence).toBeCloseTo(0.9);
+    expect(h.bins[0].accuracy).toBeCloseTo(0.9);
+    expect(h.bins[0].n).toBe(20);
+});
+
+test("calibration defaults to abstain (honest) when fields are absent", () => {
+    // An empty/partial response must NOT fabricate a Brier/ECE number.
+    const h = mapCalibrationResponse({});
+    expect(h.abstained).toBe(true);
+    expect(h.brier).toBe(0);
+    expect(h.ece).toBe(0);
+    expect(h.attempts).toBe(0);
+    expect(h.bins).toHaveLength(0);
 });

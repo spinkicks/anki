@@ -3,7 +3,7 @@ Copyright: Ankitects Pty Ltd and contributors
 License: GNU AGPL, version 3 or later; http://www.gnu.org/licenses/agpl.html
 -->
 <script lang="ts">
-    import type { PerformanceHeadline, ReadinessHeadline } from "./data";
+    import type { CalibrationHeadline, PerformanceHeadline, ReadinessHeadline } from "./data";
 
     export let coverage: { covered: number; total: number; percent: number };
     // memoryVerified.timed = non-abstained leaves; .total = leaves with data.
@@ -11,6 +11,8 @@ License: GNU AGPL, version 3 or later; http://www.gnu.org/licenses/agpl.html
     // Honest headline stats from the engine (abstain until real data exists).
     export let performance: PerformanceHeadline;
     export let readiness: ReadinessHeadline;
+    // Calibration of the learner's SELF-RATED accuracy (Brier + reliability gap).
+    export let calibration: CalibrationHeadline;
 
     // Meter widths clamp to [0,100]. Memory meter = timed / total; guard /0 so a
     // fresh deck (no data yet) reads a calm empty meter rather than NaN.
@@ -84,6 +86,29 @@ License: GNU AGPL, version 3 or later; http://www.gnu.org/licenses/agpl.html
             </div>
             <div class="hint">
                 {Math.round(readiness.lower)}–{Math.round(readiness.upper)} (95%)
+            </div>
+        {/if}
+    </div>
+    <div class="stat">
+        <!-- Calibration = how well your pre-answer confidence matched your
+             SELF-RATED accuracy (Brier, lower is better). Abstains below the
+             attempt threshold; never a fabricated number. -->
+        <div class="label">Calibration</div>
+        {#if calibration.abstained}
+            <div class="val muted">
+                — <small>abstains</small>
+            </div>
+            <div class="meter"><i style="width:0%"></i></div>
+        {:else}
+            <div class="val">
+                {calibration.brier.toFixed(2)}
+                <small>Brier · lower better</small>
+            </div>
+            <div class="meter">
+                <i style={`width:${Math.round((1 - calibration.brier) * 100)}%`}></i>
+            </div>
+            <div class="hint">
+                {Math.round(calibration.gapPct)}pt gap · self-rated
             </div>
         {/if}
     </div>

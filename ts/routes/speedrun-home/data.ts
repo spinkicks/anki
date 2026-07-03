@@ -6,9 +6,11 @@
 // composing the shared loaders; it shapes their output into the view model the
 // Home page renders (segments + honest headline stats).
 import {
+    type CalibrationHeadline as CalibrationData,
     type ExamProfile,
     GRE_MAX,
     GRE_MIN,
+    loadCalibration,
     loadCoverage,
     loadProfile,
     loadRows,
@@ -50,12 +52,25 @@ export interface ReadinessHeadline {
     unlockHuman: string; // top unlock hint ("" when none/scored)
 }
 
+// Honest headline Calibration of the learner's SELF-RATED accuracy. `brier`
+// (lower is better) is the primary number; `gapPct` is the ECE reliability gap
+// (percentage points) shown as a sub-hint. Abstains below the engine threshold —
+// never a fabricated number.
+export interface CalibrationHeadline {
+    abstained: boolean;
+    brier: number; // 0..1, lower is better (0 when abstained)
+    gapPct: number; // ECE * 100, the reliability gap in percentage points
+    attempts: number; // logged attempts scored (for the sub-label)
+}
+
 export interface HomeView {
     profile: ExamProfile;
     coverage: { covered: number; total: number; percent: number };
     segments: Segment[];
     performance: PerformanceHeadline;
     readiness: ReadinessHeadline;
+    // Calibration of self-rated accuracy (Brier + reliability gap; abstains).
+    calibration: CalibrationHeadline;
     // memoryVerified.timed = leaf rows we have actually timed (non-abstained).
     // memoryVerified.total = leaf rows that have ANY review data
     //   (cardsWithData > 0). This is the honest reading: the "/timed"
@@ -76,10 +91,11 @@ export async function loadHome(examId = "gre_math"): Promise<HomeView | null> {
     if (!profile) {
         return null;
     }
-    const [rows, coverage, scaffold] = await Promise.all([
+    const [rows, coverage, scaffold, calibrationData] = await Promise.all([
         loadRows(profile),
         loadCoverage(profile),
         loadScaffoldSummary(profile),
+        loadCalibration(profile),
     ]);
 
     const containers = rows.filter((r) => r.isContainer);
@@ -122,6 +138,7 @@ export async function loadHome(examId = "gre_math"): Promise<HomeView | null> {
         scaffold.abstainReason,
         scaffold.unlockRequirements,
     );
+    const calibration = buildCalibrationHeadline(calibrationData);
 
     return {
         profile,
@@ -129,6 +146,7 @@ export async function loadHome(examId = "gre_math"): Promise<HomeView | null> {
         segments,
         performance,
         readiness,
+        calibration,
         memoryVerified,
         weakestTimed,
         timedReviewsTotal,
@@ -213,5 +231,22 @@ export function buildReadinessHeadline(
         meterPct,
         reason: "",
         unlockHuman: "",
+    };
+}
+
+// Honest Calibration headline. The engine already abstains below its attempt
+// threshold; this pass-through keeps the abstain honest (zeroing the numbers)
+// and converts the ECE reliability gap to percentage points for the sub-hint.
+export function buildCalibrationHeadline(
+    cal: CalibrationData,
+): CalibrationHeadline {
+    if (cal.abstained) {
+        return { abstained: true, brier: 0, gapPct: 0, attempts: cal.attempts };
+    }
+    return {
+        abstained: false,
+        brier: cal.brier,
+        gapPct: Math.max(0, Math.min(100, cal.ece * 100)),
+        attempts: cal.attempts,
     };
 }

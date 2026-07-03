@@ -4,7 +4,11 @@
 import { type Row, ScoreScale } from "@speedrun/data";
 import { expect, test } from "vitest";
 
-import { buildPerformanceHeadline, buildReadinessHeadline } from "./data";
+import {
+    buildCalibrationHeadline,
+    buildPerformanceHeadline,
+    buildReadinessHeadline,
+} from "./data";
 
 function leaf(id: string, weight: number): Row {
     return {
@@ -103,4 +107,33 @@ test("readiness headline abstains with the top unlock hint", () => {
     expect(h.point).toBe(0);
     expect(h.unlockHuman).toBe("Complete 3 more timed mini-mock(s)");
     expect(h.reason).toBe("Readiness locked");
+});
+
+test("calibration headline abstains (honest zeros) below the threshold", () => {
+    const h = buildCalibrationHeadline({
+        abstained: true,
+        brier: 0,
+        ece: 0,
+        attempts: 5,
+        bins: [],
+    });
+    expect(h.abstained).toBe(true);
+    expect(h.brier).toBe(0);
+    expect(h.gapPct).toBe(0);
+    expect(h.attempts).toBe(5);
+});
+
+test("calibration headline maps Brier + ECE reliability gap when scored", () => {
+    const h = buildCalibrationHeadline({
+        abstained: false,
+        brier: 0.18,
+        ece: 0.12,
+        attempts: 40,
+        bins: [{ confidence: 0.9, accuracy: 0.7, n: 40 }],
+    });
+    expect(h.abstained).toBe(false);
+    expect(h.brier).toBeCloseTo(0.18);
+    // ECE 0.12 -> 12 percentage-point reliability gap sub-hint.
+    expect(h.gapPct).toBeCloseTo(12);
+    expect(h.attempts).toBe(40);
 });
