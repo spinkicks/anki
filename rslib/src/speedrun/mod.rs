@@ -921,6 +921,67 @@ mod test {
     }
 
     #[test]
+    fn topic_mastery_single_card_abstains_no_fabricated_band() -> Result<()> {
+        // Honesty guard: a topic with EXACTLY ONE declarative card that carries a
+        // memory state AND has >= min_reviews (20) graded reviews must ABSTAIN.
+        // `mean_ci` returns the (0.0, 1.0) "no band" sentinel for n < 2 (see its
+        // doc + mean_ci_fewer_than_two_is_full_uncertainty), so with a single card
+        // the 95% band is not a real interval. If the topic did NOT abstain, the UI
+        // would render that sentinel as a literal "0%-100%" 95% CI — a fabricated
+        // statistic. The abstain gate must fire on cards_with_data < 2.
+        use crate::card::FsrsMemoryState;
+        use crate::revlog::RevlogEntry;
+        use crate::revlog::RevlogId;
+
+        let mut col = Collection::new();
+        let nt = col.get_notetype_by_name("Basic")?.unwrap();
+
+        // Exactly ONE declarative card under the topic, with a memory state.
+        let mut note = nt.new_note();
+        note.set_field(0, "q_solo")?;
+        col.add_note(&mut note, DeckId(1))?;
+        note.tags = vec!["calc::integration".into()];
+        col.update_note(&mut note)?;
+        let cid = col.storage.all_cards_of_note(note.id)?.pop().unwrap().id;
+        let mut card = col.storage.get_card(cid)?.unwrap();
+        card.memory_state = Some(FsrsMemoryState {
+            stability: 1000.0,
+            difficulty: 5.0,
+        });
+        col.storage.update_card(&card)?;
+
+        // 24 graded reviews on that one card (>= min_reviews 20): reviews clear the
+        // review gate, so ONLY the single-card gate can force the abstain.
+        let mut rid = 5_000i64;
+        for _ in 0..24 {
+            col.storage.add_revlog_entry(
+                &RevlogEntry {
+                    id: RevlogId(rid),
+                    cid,
+                    button_chosen: 3,
+                    ..Default::default()
+                },
+                false,
+            )?;
+            rid += 1;
+        }
+
+        let resp = col.get_topic_mastery(anki_proto::speedrun::GetTopicMasteryRequest {
+            topics: strs(&["calc::integration"]),
+            mastery_threshold: 0.0, // => default 0.9
+            min_reviews: 0,         // => default 20
+        })?;
+        let t = &resp.topics[0];
+        assert_eq!(t.cards_with_data, 1, "exactly one memory-state card");
+        assert_eq!(t.graded_reviews, 24, "24 rated rows >= min_reviews 20");
+        assert!(
+            t.abstained,
+            "1 card (< 2) => must abstain; the (0,1) mean_ci sentinel is NOT a real 95% band"
+        );
+        Ok(())
+    }
+
+    #[test]
     fn topic_mastery_excludes_problem_cards() -> Result<()> {
         // A topic with BOTH declarative cards and Speedrun::Problem cards: Memory
         // mastery is a DECLARATIVE-only signal, so the problem cards must NOT feed
