@@ -128,6 +128,13 @@ impl Collection {
     /// (cid, revlog_id). Light Speedrun-owned config mutation (mirrors the other
     /// `speedrun:*` config writes); NOT undoable and touches no cards/notes/
     /// scheduling. A repeated (cid, revlog_id) is a no-op (idempotent capture).
+    ///
+    /// The desktop MVP capture path writes the SAME blob from Python via
+    /// `col.set_config` (a plain `speedrun:*` config write; see
+    /// `aqt/speedrun_capture.py`), so this Rust twin is currently exercised only
+    /// by the store round-trip tests. Kept as the canonical Rust store API for a
+    /// future engine-side writer (Android capture, batch import).
+    #[allow(dead_code)]
     pub(crate) fn speedrun_append_calibration_attempt(
         &mut self,
         attempt: crate::speedrun::CalibrationAttempt,
@@ -633,11 +640,12 @@ impl Collection {
     }
 
     /// Count "timed mini-mocks" as SESSIONS, not calendar days. A session is a
-    /// run of graded problem-attempt revlog entries with no gap >= `SESSION_GAP_MS`
-    /// between consecutive attempts; a session counts toward the total once it has
-    /// >= `min_items` attempts. This fixes the day-proxy bug where two separate
-    /// mini-mocks on the SAME day counted as one, under-counting the readiness
-    /// give-up gate (`min_mini_mocks`). Read-only.
+    /// run of graded problem-attempt revlog entries with no gap of at least
+    /// `SESSION_GAP_MS` between consecutive attempts; a session counts toward the
+    /// total once it holds at least `min_items` attempts. This fixes the
+    /// day-proxy bug where two separate mini-mocks on the SAME day counted as
+    /// one, under-counting the readiness give-up gate (`min_mini_mocks`).
+    /// Read-only.
     fn mini_mock_count(&mut self, min_items: u32) -> error::Result<u32> {
         let guard = self.search_cards_into_table("\"tag:Speedrun::Problem\"", SortMode::NoOrder)?;
         let revlog = guard.col.storage.get_revlog_entries_for_searched_cards()?;
