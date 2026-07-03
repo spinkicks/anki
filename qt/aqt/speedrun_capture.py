@@ -80,6 +80,41 @@ def take_pending(cid: int) -> Optional[str]:
     return _pending.pop(cid, None)
 
 
+def clear_pending(cid: int) -> None:
+    """Drop any pending confidence for a card id without writing an attempt.
+    Used when a card is buried/suspended before it is answered, so a later
+    answer of that card can't inherit a bet the user never made for it."""
+    _pending.pop(cid, None)
+
+
+def clear_all_pending() -> None:
+    """Drop every pending confidence. Used when the Reviewer is closing, so no
+    stash survives to be mis-attached to a future session's answer."""
+    _pending.clear()
+
+
+def clear_pending_for_note(col: Collection, nid: int) -> None:
+    """Drop pending confidences for all cards of a note. The note-level
+    bury/suspend hooks pass a NOTE id, but ``_pending`` is keyed by CARD id, so
+    resolve the note's cards and clear each. Best-effort: a missing note (e.g.
+    already deleted) is a harmless no-op."""
+    try:
+        card_ids = col.get_note(nid).card_ids()
+    except Exception:
+        return
+    for cid in card_ids:
+        _pending.pop(cid, None)
+
+
+def is_question_state(state: Any) -> bool:
+    """True iff the Reviewer is showing the QUESTION side. A confidence is a
+    PRE-answer bet, so we only accept it on ``"question"`` — never on
+    ``"answer"``/``"transition"``/``None``. This stops the qfmt buttons (which
+    re-render on the answer side via ``{{FrontSide}}``) from overwriting the
+    genuine pre-answer confidence after the answer is revealed."""
+    return state == "question"
+
+
 def build_attempt(
     cid: int, revlog_id: int, level: str, ease: int, ts: int
 ) -> dict[str, Any]:
@@ -148,6 +183,11 @@ def _on_js_message(
     # Only capture in the Reviewer, and only on Speedrun::Problem cards.
     if not isinstance(context, aqt.reviewer.Reviewer):
         return handled
+    # Only accept a PRE-answer bet: the qfmt confidence buttons re-render on the
+    # answer side ({{FrontSide}}), so a post-reveal click must not overwrite the
+    # genuine question-side confidence.
+    if not is_question_state(context.state):
+        return handled
     card = context.card
     if not is_problem_card(card):
         return handled
@@ -167,9 +207,47 @@ def _on_answer(reviewer: aqt.reviewer.Reviewer, card: Card, ease: int) -> None:
         take_pending(card.id)
 
 
+def _on_will_suspend_card(cid: int) -> None:
+    # reviewer_will_suspend_card(id: int) — the current card's id.
+    clear_pending(cid)
+
+
+def _on_will_bury_card(cid: int) -> None:
+    # reviewer_will_bury_card(id: int) — the current card's id.
+    clear_pending(cid)
+
+
+def _on_will_suspend_note(nid: int) -> None:
+    # reviewer_will_suspend_note(nid: int) — a NOTE id; clear all its cards.
+    from aqt import mw
+
+    if mw is not None and mw.col is not None:
+        clear_pending_for_note(mw.col, nid)
+
+
+def _on_will_bury_note(nid: int) -> None:
+    # reviewer_will_bury_note(nid: int) — a NOTE id; clear all its cards.
+    from aqt import mw
+
+    if mw is not None and mw.col is not None:
+        clear_pending_for_note(mw.col, nid)
+
+
+def _on_will_end() -> None:
+    # reviewer_will_end() — reviewer is closing; no stash may outlive it.
+    clear_all_pending()
+
+
 def register() -> None:
     """Wire the capture hooks. Called once at startup."""
     from aqt import gui_hooks
 
     gui_hooks.webview_did_receive_js_message.append(_on_js_message)
     gui_hooks.reviewer_did_answer_card.append(_on_answer)
+    # BUG 5: clear a stale pending bet when a card is buried/suspended (so a
+    # later answer can't inherit it) or when the reviewer closes.
+    gui_hooks.reviewer_will_suspend_card.append(_on_will_suspend_card)
+    gui_hooks.reviewer_will_bury_card.append(_on_will_bury_card)
+    gui_hooks.reviewer_will_suspend_note.append(_on_will_suspend_note)
+    gui_hooks.reviewer_will_bury_note.append(_on_will_bury_note)
+    gui_hooks.reviewer_will_end.append(_on_will_end)

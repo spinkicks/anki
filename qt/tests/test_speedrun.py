@@ -371,6 +371,103 @@ def test_append_attempt_dedupes_by_cid_revlog() -> None:
         col.close()
 
 
+# ---- T7: stale-stash clearing on bury/suspend/reviewer-close (BUG 5) ----
+
+
+def test_clear_pending_removes_single_card() -> None:
+    # BUG 5: a card-level suspend/bury must drop just that card's pending bet.
+    speedrun_capture._pending.clear()
+    speedrun_capture.stash_pending(1, "sure")
+    speedrun_capture.stash_pending(2, "guess")
+    speedrun_capture.clear_pending(1)
+    assert 1 not in speedrun_capture._pending
+    assert speedrun_capture._pending.get(2) == "guess"
+    # Clearing an absent card is a harmless no-op.
+    speedrun_capture.clear_pending(999)
+    assert speedrun_capture._pending.get(2) == "guess"
+
+
+def test_clear_all_pending_empties_dict() -> None:
+    # BUG 5: closing the reviewer must drop every pending bet.
+    speedrun_capture._pending.clear()
+    speedrun_capture.stash_pending(1, "sure")
+    speedrun_capture.stash_pending(2, "think")
+    speedrun_capture.clear_all_pending()
+    assert speedrun_capture._pending == {}
+
+
+def test_clear_pending_for_note_clears_all_its_cards() -> None:
+    # BUG 5: a note-level suspend/bury passes a NOTE id; every card of that note
+    # (which is what _pending is keyed on) must be cleared.
+    speedrun_capture._pending.clear()
+    col = _empty_col()
+    try:
+        did = col.decks.get_current_id()
+        pcard = _add_problem_note(col, did)
+        nid = pcard.nid
+        speedrun_capture.stash_pending(pcard.id, "sure")
+        # An unrelated card's pending must survive.
+        speedrun_capture.stash_pending(pcard.id + 12345, "guess")
+        speedrun_capture.clear_pending_for_note(col, nid)
+        assert pcard.id not in speedrun_capture._pending
+        assert speedrun_capture._pending.get(pcard.id + 12345) == "guess"
+    finally:
+        col.close()
+
+
+def test_no_stale_attempt_after_suspend_then_later_answer() -> None:
+    # BUG 5 (the whole point): press a confidence, suspend the card (which clears
+    # the stash), then later answer that SAME card with no fresh press. No stale
+    # attempt may be written for that new revlog id.
+    speedrun_capture._pending.clear()
+    col = _empty_col()
+    try:
+        did = col.decks.get_current_id()
+        pcard = _add_problem_note(col, did)
+        cid = pcard.id
+        # User presses "Sure" but then suspends instead of answering.
+        speedrun_capture.stash_pending(cid, "sure")
+        speedrun_capture.clear_pending(cid)  # what the suspend hook will do
+        assert cid not in speedrun_capture._pending
+
+        # The card comes back later and is answered WITHOUT a fresh press.
+        card = col.sched.getCard()
+        assert card is not None and card.id == cid
+        col.sched.answerCard(card, 3)
+        attempt = speedrun_capture.reconcile_answer(col, cid, ease=3)
+        assert attempt is None  # no bet was made for THIS attempt
+        log = col.get_config(speedrun_capture.CALIBRATION_LOG_KEY, [])
+        assert log == []
+    finally:
+        col.close()
+
+
+# ---- T8: pre-answer-only guard — no answer-side overwrite (BUG 6) ----
+
+
+def test_is_question_state_guard() -> None:
+    # BUG 6: only the QUESTION side may (re)stash a confidence.
+    assert speedrun_capture.is_question_state("question") is True
+    assert speedrun_capture.is_question_state("answer") is False
+    assert speedrun_capture.is_question_state("transition") is False
+    assert speedrun_capture.is_question_state(None) is False
+
+
+def test_answer_side_press_does_not_overwrite_pre_answer_bet() -> None:
+    # BUG 6: the Problem afmt re-renders the qfmt buttons ({{FrontSide}}), so a
+    # post-reveal click must NOT overwrite the genuine pre-answer confidence.
+    speedrun_capture._pending.clear()
+    cid = 42
+    # Pre-answer (question side): the bet is accepted.
+    if speedrun_capture.is_question_state("question"):
+        speedrun_capture.stash_pending(cid, "sure")
+    assert speedrun_capture._pending.get(cid) == "sure"
+    # Answer side: a "guess" click must be ignored, leaving "sure" intact.
+    if speedrun_capture.is_question_state("answer"):
+        speedrun_capture.stash_pending(cid, "guess")
+    assert speedrun_capture._pending.get(cid) == "sure"
+
+
 def test_reconcile_writes_attempt_after_answer() -> None:
     # Full desktop path: stash a confidence, answer the card (writes a revlog
     # row), reconcile => an attempt is logged with the answer's revlog id and the
