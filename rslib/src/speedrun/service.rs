@@ -246,7 +246,11 @@ impl crate::services::SpeedrunService for Collection {
             // the Memory RANGE band) instead of a Wilson CI on the mastered proportion.
             // `mastered_count`/`cards_with_data` remain the raw DATA-column counts.
             let (mastered_lower, mastered_upper) = mean_ci(&retrievabilities, WILSON_Z_95);
-            let abstained = graded_reviews < min_reviews || cards_with_data == 0;
+            // Abstain with < 2 cards of data, not just 0: `mean_ci` returns the
+            // (0.0, 1.0) "no band" sentinel for n < 2, so with a single card the
+            // 95% band is not a real interval — the UI would otherwise render that
+            // sentinel as a literal fabricated "0%–100%" 95% CI (honesty bug).
+            let abstained = graded_reviews < min_reviews || cards_with_data < 2;
 
             out.push(anki_proto::speedrun::TopicMastery {
                 topic: topic.clone(),
