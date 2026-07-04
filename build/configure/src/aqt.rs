@@ -113,8 +113,23 @@ fn build_data_folder(build: &mut Build) -> Result<()> {
     build_js(build)?;
     build_pages(build)?;
     build_icons(build)?;
+    build_seed_deck(build)?;
     copy_sveltekit(build)?;
     Ok(())
+}
+
+/// Bundle the Speedrun GRE-Math seed deck into the aqt data folder so it ships
+/// inside the packaged desktop app (the wheel force-includes out/qt/_aqt, and
+/// the installer bundles that wheel). The first-run auto-import hook resolves it
+/// via aqt_data_path()/gre_math_seed.apkg. See qt/aqt/speedrun_logic.py.
+fn build_seed_deck(build: &mut Build) -> Result<()> {
+    build.add_action(
+        "qt:aqt:data:seed_deck",
+        CopyFile {
+            input: "qt/aqt/data/gre_math_seed.apkg".into(),
+            output: "qt/_aqt/data/gre_math_seed.apkg",
+        },
+    )
 }
 
 fn copy_sveltekit(build: &mut Build) -> Result<()> {

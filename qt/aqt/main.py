@@ -527,6 +527,15 @@ class AnkiQt(QMainWindow):
                 onsuccess()
             if not self.safeMode:
                 self.maybe_check_for_addon_updates(self.setup_auto_update)
+                # Config-gated first-run auto-import of the bundled Speedrun seed
+                # deck — fired here (same post-sync, non-safeMode placement as the
+                # auto-open below) BEFORE opening Home so the deck is present when
+                # Home loads. Idempotent: imports only when the exam deck is
+                # absent AND the bundled apkg is found; never re-imports, never
+                # crashes launch (all guarded in speedrun_logic). Reversible via
+                # speedrunSeedImportEnabled.
+                if self.pm.profile.get("speedrunSeedImportEnabled", True):
+                    self._maybe_import_speedrun_seed()
                 # Config-gated auto-open of Speedrun Home — fired here, AFTER any
                 # startup sync completes, so the sync-progress dialog can't stack
                 # under it; skipped in safe/recovery mode (inside this guard).
@@ -1326,6 +1335,26 @@ title="{}" {}>{}</button>""".format(
 
     def onSpeedrunHome(self) -> None:
         aqt.dialogs.open("SpeedrunHome", self)
+
+    def _maybe_import_speedrun_seed(self) -> None:
+        # First-run convenience: import the bundled GRE-Math seed deck so a fresh
+        # install (e.g. a grader's) has the deck already loaded — no manual
+        # File>Import. The decision + import are Qt-free and idempotent (skip when
+        # the exam deck already exists) and swallow all errors, so a
+        # missing/corrupt bundle can never break launch. See speedrun_logic.
+        try:
+            from aqt.speedrun_logic import (
+                EXAM_DECK_NAME,
+                maybe_import_seed_deck,
+                speedrun_seed_apkg_path,
+            )
+
+            maybe_import_seed_deck(
+                self.col, EXAM_DECK_NAME, speedrun_seed_apkg_path()
+            )
+        except Exception:
+            # Belt-and-braces: never let seed import affect launch.
+            pass
 
     def on_check_for_updates(self) -> None:
         from packaging.version import Version

@@ -16,9 +16,12 @@ import tempfile
 from anki.collection import Collection
 from anki.decks import DeckId
 from aqt.speedrun_logic import (
+    SEED_APKG_NAME,
     build_mini_mock_deck,
     decide_mini_mock,
     decide_start_run,
+    maybe_import_seed_deck,
+    speedrun_seed_apkg_path,
 )
 
 EXAM_DECK = "Speedrun::GRE Math"
@@ -715,3 +718,185 @@ def test_mcq_answer_side_press_does_not_overwrite_pre_answer_pick() -> None:
     if speedrun_capture.is_question_state("answer"):
         speedrun_capture.stash_pending_mcq(cid, "A")
     assert speedrun_capture._pending_mcq.get(cid) == "C"
+
+
+# ---- Installer seed-deck auto-import (Qt-free decision + idempotent import) ----
+#
+# The desktop installer ships gre_math_seed.apkg inside the packaged app so a
+# grader who installs the MSI has the deck already loaded — zero manual import.
+# The first-run hook (main.py, mirroring the auto-open hook: post-sync, inside
+# the `not safeMode` guard) calls maybe_import_seed_deck. These tests pin the
+# Qt-free logic: import only when the exam deck is ABSENT and the apkg EXISTS;
+# never re-import (idempotent); never crash on a missing/invalid apkg.
+
+from anki.collection import DeckIdLimit, ExportAnkiPackageOptions  # noqa: E402
+
+
+def _make_seed_apkg(path: str) -> None:
+    """Build a fixture .apkg holding the exam deck + one card, like the real seed.
+
+    Faithful to the shipped seed: a real .apkg (round-trippable by the same
+    import API) whose top-level deck is literally "Speedrun::GRE Math".
+    """
+    src = _empty_col()
+    try:
+        deck_id = src.decks.id(EXAM_DECK)
+        assert deck_id is not None
+        _add_new_card(src, deck_id)
+        src.export_anki_package(
+            out_path=path,
+            options=ExportAnkiPackageOptions(
+                with_scheduling=False,
+                with_deck_configs=False,
+                legacy=False,
+            ),
+            limit=DeckIdLimit(deck_id=deck_id),
+        )
+    finally:
+        src.close()
+
+
+def test_maybe_import_seed_deck_imports_when_deck_absent() -> None:
+    # Fresh collection, no exam deck, bundled apkg present -> import runs and the
+    # deck (with its card) appears. This is the grader's zero-import first run.
+    apkg = tempfile.mktemp(suffix=".apkg")
+    _make_seed_apkg(apkg)
+    col = _empty_col()
+    try:
+        assert col.decks.id_for_name(EXAM_DECK) is None
+        imported = maybe_import_seed_deck(col, EXAM_DECK, apkg)
+        assert imported is True
+        assert col.decks.id_for_name(EXAM_DECK) is not None
+        # The card came in with the deck.
+        assert col.find_cards(f'deck:"{EXAM_DECK}"')
+    finally:
+        col.close()
+        os.unlink(apkg)
+
+
+def test_maybe_import_seed_deck_skips_when_deck_present() -> None:
+    # Idempotency: the exam deck already exists -> SKIP. No import, no duplicate.
+    apkg = tempfile.mktemp(suffix=".apkg")
+    _make_seed_apkg(apkg)
+    col = _empty_col()
+    try:
+        # Pre-create the exam deck so the guard trips.
+        col.decks.id(EXAM_DECK)
+        before = len(col.decks.all_names_and_ids())
+        imported = maybe_import_seed_deck(col, EXAM_DECK, apkg)
+        assert imported is False
+        after = len(col.decks.all_names_and_ids())
+        assert after == before, "import must not have added/duplicated decks"
+    finally:
+        col.close()
+        os.unlink(apkg)
+
+
+def test_maybe_import_seed_deck_idempotent_runs_twice_imports_once() -> None:
+    # Running the hook twice must import exactly once: the second call sees the
+    # now-present deck and skips (no dup notes/cards).
+    apkg = tempfile.mktemp(suffix=".apkg")
+    _make_seed_apkg(apkg)
+    col = _empty_col()
+    try:
+        assert maybe_import_seed_deck(col, EXAM_DECK, apkg) is True
+        cards_after_first = len(col.find_cards(f'deck:"{EXAM_DECK}"'))
+        assert cards_after_first >= 1
+
+        assert maybe_import_seed_deck(col, EXAM_DECK, apkg) is False
+        cards_after_second = len(col.find_cards(f'deck:"{EXAM_DECK}"'))
+        assert cards_after_second == cards_after_first, "must not re-import"
+    finally:
+        col.close()
+        os.unlink(apkg)
+
+
+def test_maybe_import_seed_deck_missing_apkg_is_noop_no_crash() -> None:
+    # No bundled apkg found (apkg_path is None) -> no-op, no crash, deck stays absent.
+    col = _empty_col()
+    try:
+        imported = maybe_import_seed_deck(col, EXAM_DECK, None)
+        assert imported is False
+        assert col.decks.id_for_name(EXAM_DECK) is None
+    finally:
+        col.close()
+
+
+def test_maybe_import_seed_deck_nonexistent_path_is_noop_no_crash() -> None:
+    # A path that points nowhere (packaged file somehow absent) must degrade to a
+    # no-op, never raise into the launch sequence.
+    col = _empty_col()
+    try:
+        bogus = tempfile.mktemp(suffix=".apkg")  # never created
+        assert not os.path.exists(bogus)
+        imported = maybe_import_seed_deck(col, EXAM_DECK, bogus)
+        assert imported is False
+        assert col.decks.id_for_name(EXAM_DECK) is None
+    finally:
+        col.close()
+
+
+def test_maybe_import_seed_deck_invalid_apkg_is_noop_no_crash() -> None:
+    # A corrupt/non-apkg file at the path must NOT crash the launch: the import
+    # error is swallowed and the function reports False.
+    col = _empty_col()
+    bad = tempfile.mktemp(suffix=".apkg")
+    with open(bad, "wb") as f:
+        f.write(b"this is not a zip/apkg")
+    try:
+        imported = maybe_import_seed_deck(col, EXAM_DECK, bad)
+        assert imported is False
+        assert col.decks.id_for_name(EXAM_DECK) is None
+    finally:
+        col.close()
+        os.unlink(bad)
+
+
+def test_speedrun_seed_apkg_path_resolves_packaged_first(tmp_path, monkeypatch) -> None:
+    # Resolution order: the packaged resource dir (aqt_data_path()) wins; only if
+    # it's absent do we fall back to the dev repo path. Here the packaged file
+    # exists, so it must be returned.
+    import aqt.speedrun_logic as sl
+
+    packaged = tmp_path / "pkgdata"
+    packaged.mkdir()
+    seed = packaged / SEED_APKG_NAME
+    seed.write_bytes(b"x")
+    monkeypatch.setattr(sl, "_aqt_data_dir", lambda: packaged)
+
+    resolved = speedrun_seed_apkg_path()
+    assert resolved is not None
+    assert os.path.normpath(resolved) == os.path.normpath(str(seed))
+
+
+def test_speedrun_seed_apkg_path_falls_back_to_dev_repo(tmp_path, monkeypatch) -> None:
+    # Packaged file absent -> fall back to the in-repo dev path
+    # (speedrun/out/gre_math_seed.apkg). Simulate both dirs; only the dev one has
+    # the file.
+    import aqt.speedrun_logic as sl
+
+    packaged = tmp_path / "pkgdata"  # exists but has no seed apkg
+    packaged.mkdir()
+    dev_out = tmp_path / "speedrun" / "out"
+    dev_out.mkdir(parents=True)
+    dev_seed = dev_out / SEED_APKG_NAME
+    dev_seed.write_bytes(b"x")
+
+    monkeypatch.setattr(sl, "_aqt_data_dir", lambda: packaged)
+    monkeypatch.setattr(sl, "_dev_repo_seed_paths", lambda: [dev_seed])
+
+    resolved = speedrun_seed_apkg_path()
+    assert resolved is not None
+    assert os.path.normpath(resolved) == os.path.normpath(str(dev_seed))
+
+
+def test_speedrun_seed_apkg_path_none_when_nowhere(tmp_path, monkeypatch) -> None:
+    # Neither packaged nor dev path has the file -> None (hook then no-ops).
+    import aqt.speedrun_logic as sl
+
+    packaged = tmp_path / "pkgdata"
+    packaged.mkdir()
+    monkeypatch.setattr(sl, "_aqt_data_dir", lambda: packaged)
+    monkeypatch.setattr(sl, "_dev_repo_seed_paths", lambda: [])
+
+    assert speedrun_seed_apkg_path() is None

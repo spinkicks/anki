@@ -9,6 +9,7 @@ from typing import Any
 import aqt
 import aqt.main
 from aqt.qt import *
+from aqt.speedrun_logic import EXAM_DECK_NAME
 from aqt.utils import disable_help_button, restoreGeom, saveGeom
 from aqt.webview import AnkiWebView, AnkiWebViewKind
 
@@ -60,7 +61,9 @@ class SpeedrunHome(QDialog):
         self.show()
 
     # The exam deck the run studies. Grounded fact: this is the seed deck name.
-    EXAM_DECK = "Speedrun::GRE Math"
+    # Single source of truth lives in speedrun_logic (shared with the installer
+    # seed auto-import idempotency check).
+    EXAM_DECK = EXAM_DECK_NAME
     # The Problems subdeck a timed mini-mock draws from (seeded bank).
     PROBLEM_DECK = "Speedrun::GRE Math::Problems"
 
