@@ -1117,6 +1117,109 @@ mod test {
     }
 
     #[test]
+    fn topic_mastery_drops_non_finite_retrievability_and_abstains() -> Result<()> {
+        // BUG P1-A (honesty): a persisted memory_state with stability == 0.0
+        // makes the FSRS read-path retrievability formula NON-FINITE (the read
+        // path does NOT clamp stability, unlike state generation). With elapsed
+        // == 0 (a last-review time of "now") the formula divides by the zero
+        // stability => NaN (verified: elapsed 0, decay 0.5, s 0.0 => r = NaN).
+        // Without a finiteness guard that NaN flows into avg_recall (the plotted
+        // Memory point) and into the mean_ci band bounds (NaN.clamp(0,1) stays
+        // NaN), and the abstain gate never checks finiteness — so a corrupt card
+        // + a healthy card + >= 20 reviews would emit a NaN number with
+        // abstained == false: a confident wrong number.
+        //
+        // Correct behavior: treat a non-finite retrievability as NO usable data
+        // (drop it exactly like a card with no memory_state). With one corrupt
+        // card dropped and one healthy card, only 1 finite card remains, so the
+        // existing cards_with_data < 2 gate abstains naturally, and every emitted
+        // number (avg_recall, mastered_lower/upper) stays finite.
+        use crate::card::FsrsMemoryState;
+        use crate::revlog::RevlogEntry;
+        use crate::revlog::RevlogId;
+
+        let topic = "calc::integration";
+        let mut col = Collection::new();
+        let now = col.timing_today()?.now;
+        let nt = col.get_notetype_by_name("Basic")?.unwrap();
+
+        // Card 1: CORRUPT — stability 0.0 (reachable via UpdateCards RPC / import /
+        // add-on / older data). last_review_time = now => elapsed 0 => NaN
+        // retrievability.
+        let mut corrupt = nt.new_note();
+        corrupt.set_field(0, "corrupt")?;
+        col.add_note(&mut corrupt, DeckId(1))?;
+        corrupt.tags = vec![topic.into()];
+        col.update_note(&mut corrupt)?;
+        let ccid = col.storage.all_cards_of_note(corrupt.id)?.pop().unwrap().id;
+        let mut cc = col.storage.get_card(ccid)?.unwrap();
+        cc.memory_state = Some(FsrsMemoryState {
+            stability: 0.0,
+            difficulty: 5.0,
+        });
+        cc.last_review_time = Some(now);
+        col.storage.update_card(&cc)?;
+
+        // Card 2: HEALTHY — high stability => finite retrievability.
+        let mut healthy = nt.new_note();
+        healthy.set_field(0, "healthy")?;
+        col.add_note(&mut healthy, DeckId(1))?;
+        healthy.tags = vec![topic.into()];
+        col.update_note(&mut healthy)?;
+        let hcid = col.storage.all_cards_of_note(healthy.id)?.pop().unwrap().id;
+        let mut hc = col.storage.get_card(hcid)?.unwrap();
+        hc.memory_state = Some(FsrsMemoryState {
+            stability: 1000.0,
+            difficulty: 5.0,
+        });
+        col.storage.update_card(&hc)?;
+
+        // >= 20 graded reviews so ONLY the finiteness/cards-with-data gate can
+        // decide the outcome (the review gate is cleared).
+        let mut rid = 20_000i64;
+        for &cid in &[ccid, hcid] {
+            for _ in 0..12 {
+                col.storage.add_revlog_entry(
+                    &RevlogEntry {
+                        id: RevlogId(rid),
+                        cid,
+                        button_chosen: 3,
+                        ..Default::default()
+                    },
+                    false,
+                )?;
+                rid += 1;
+            }
+        }
+
+        let resp = col.get_topic_mastery(anki_proto::speedrun::GetTopicMasteryRequest {
+            topics: strs(&[topic]),
+            mastery_threshold: 0.0, // => default 0.9
+            min_reviews: 0,         // => default 20
+        })?;
+        let t = &resp.topics[0];
+        // The plotted Memory point and both band bounds must be finite — never a
+        // NaN/Inf leaking from the corrupt card.
+        assert!(t.avg_recall.is_finite(), "avg_recall={}", t.avg_recall);
+        assert!(
+            t.mastered_lower.is_finite() && t.mastered_upper.is_finite(),
+            "band [{}, {}] must be finite",
+            t.mastered_lower,
+            t.mastered_upper
+        );
+        // Corrupt card dropped => 1 finite card < 2 => abstain (honest).
+        assert_eq!(
+            t.cards_with_data, 1,
+            "only the 1 finite (healthy) card counts; corrupt zero-stability card dropped"
+        );
+        assert!(
+            t.abstained,
+            "1 finite card (< 2) => must abstain, not emit a confident number"
+        );
+        Ok(())
+    }
+
+    #[test]
     fn interleave_spreads_topics_round_robin() {
         // Balanced-ish mix: round-robin spreads topics so same-topic cards are as
         // far apart as the mix allows. Topic 0 has one surplus card (3 vs 2) so it
@@ -1533,6 +1636,128 @@ mod test {
         assert_eq!(perf.scale, anki_proto::speedrun::ScoreScale::Unit as i32);
         // gap_delta = declarative recall - problem accuracy; computed (both present).
         assert!(t.gap_delta.abs() <= 1.0, "gap_delta={}", t.gap_delta);
+        Ok(())
+    }
+
+    #[test]
+    fn performance_gap_delta_finite_with_zero_stability_declarative_card() -> Result<()> {
+        // BUG P1-A (honesty), gap-meter path: topic_recall averages FSRS
+        // retrievability over the topic's declarative cards with NO finiteness
+        // guard. A declarative card with stability == 0.0 yields a non-finite
+        // retrievability (NaN/Inf); that flows into recall and then into
+        // gap_delta = recall - performance.point (the §7d gap meter), so a topic
+        // with a healthy problem score would emit a NaN/Inf gap_delta — a
+        // confident wrong number on the gap plot.
+        //
+        // Correct behavior: topic_recall drops the non-finite card exactly like a
+        // card with no memory_state, so recall (and gap_delta) are always finite.
+        use crate::card::FsrsMemoryState;
+        let topic = "calc::single_var::integration";
+        let mut col = Collection::new();
+        let now = col.timing_today()?.now;
+
+        // A CORRUPT declarative card: stability 0.0 + last_review_time = now
+        // (elapsed 0) => NaN retrievability.
+        let nt = col.get_notetype_by_name("Basic")?.unwrap();
+        let mut d = nt.new_note();
+        d.set_field(0, "decl_corrupt")?;
+        col.add_note(&mut d, DeckId(1))?;
+        d.tags = vec![topic.into()];
+        col.update_note(&mut d)?;
+        let dcid = col.storage.all_cards_of_note(d.id)?.pop().unwrap().id;
+        let mut dc = col.storage.get_card(dcid)?.unwrap();
+        dc.memory_state = Some(FsrsMemoryState {
+            stability: 0.0,
+            difficulty: 5.0,
+        });
+        dc.last_review_time = Some(now);
+        col.storage.update_card(&dc)?;
+
+        // A healthy problem card (10 attempts, 9 correct => accuracy 0.9) so
+        // performance is scored and gap_delta is actually computed.
+        let pcid = add_problem_card(&mut col, topic, "prob");
+        add_problem_attempts(&mut col, pcid, 5, 10, 9);
+
+        let resp =
+            col.get_performance_readiness(anki_proto::speedrun::GetPerformanceReadinessRequest {
+                topics: vec![topic.into()],
+            })?;
+        let t = &resp.topics[0];
+        let perf = t.performance.as_ref().unwrap();
+        assert!(!perf.abstained, "10 attempts >= min 5 => scored");
+        // gap_delta must be finite: the zero-stability declarative card's
+        // non-finite recall must NOT reach recall - performance.point.
+        assert!(
+            t.gap_delta.is_finite(),
+            "gap_delta must be finite, got {}",
+            t.gap_delta
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn readiness_margin_uses_only_ability_contributing_attempts() -> Result<()> {
+        // BUG P2-a: the conformal margin (readiness band WIDTH) must be computed
+        // from the attempts that actually FEED the ability point estimate (scored
+        // AND weight > 0), NOT from EVERY requested topic's attempts. A scored but
+        // WEIGHT-0 topic contributes to total_attempts (and coverage) yet never
+        // enters ability_terms; summing its attempts into the margin tightens the
+        // interval on evidence that never entered the point => the band claims
+        // more precision than its evidence.
+        use super::conformal_margin;
+
+        let mut col = Collection::new();
+        let cfg = super::scoring_config_from_profile(&col.speedrun_exam_profile_json("gre_math"));
+        let base = cfg.readiness.conformal.base_margin; // 40.0
+        let k = cfg.readiness.conformal.widen_k; // 8.0
+
+        // Ability-contributing topic: `linear_algebra::eigen` (weight 0.10 > 0).
+        // Two mini-mock sessions of 5 attempts each => 10 attempts, all feeding
+        // ability, and 2 sessions satisfy the min_mini_mocks (2) gate. Accuracy
+        // 0.5 (5 correct of 10 across the two bursts) => ability 0.5 => scaled 595
+        // (mid-range) so the ± margin band is NOT clamped at 200/990.
+        let ability_topic = "linear_algebra::eigen";
+        let ac = add_problem_card(&mut col, ability_topic, "ability");
+        add_problem_attempts(&mut col, ac, 5, 5, 5); // day 5: 5 correct
+        add_problem_attempts(&mut col, ac, 6, 5, 0); // day 6: 0 correct => 5/10 = 0.5
+
+        // WEIGHT-0 topic: `calc` (ets_weight 0.0). Fully scored (5 attempts) so it
+        // COUNTS toward coverage and total_attempts, but weight == 0 => it does
+        // NOT enter ability_terms. NOT hierarchically related to eigen, so the
+        // per-topic tag searches don't overlap. Its 5 attempts must NOT tighten
+        // the readiness margin.
+        let weight0_topic = "calc";
+        let wc = add_problem_card(&mut col, weight0_topic, "weight0");
+        add_problem_attempts(&mut col, wc, 7, 5, 3);
+
+        let resp =
+            col.get_performance_readiness(anki_proto::speedrun::GetPerformanceReadinessRequest {
+                topics: vec![ability_topic.into(), weight0_topic.into()],
+            })?;
+        let overall = resp.overall_readiness.as_ref().unwrap();
+        assert!(
+            !overall.abstained,
+            "2 sessions + full coverage + tight interval => unlocked; reason={}",
+            resp.abstain_reason
+        );
+
+        // Margin must use ONLY the ability-contributing attempts (10), NOT the
+        // total across all requested topics (10 + 5 = 15).
+        let expected_margin = conformal_margin(base, k, 10);
+        let wrong_margin = conformal_margin(base, k, 15);
+        assert!(
+            (expected_margin - wrong_margin).abs() > 1e-6,
+            "precondition: the two attempt counts must yield different margins"
+        );
+        let emitted_width = overall.upper - overall.lower;
+        assert!(
+            (emitted_width - 2.0 * expected_margin).abs() < 1e-6,
+            "readiness width must use only ability-contributing attempts (n=10 => \
+             width {}), not total attempts (n=15 => width {}); emitted width {}",
+            2.0 * expected_margin,
+            2.0 * wrong_margin,
+            emitted_width
+        );
         Ok(())
     }
 
