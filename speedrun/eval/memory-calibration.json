@@ -1,0 +1,26 @@
+{
+  "data_source": "SIMULATED FSRS review stream (matched-model self-consistency; default FSRS params; NOT real human review logs)",
+  "n": 4000,
+  "base_rate": 0.863000,
+  "brier": 0.056879,
+  "log_loss": 0.217667,
+  "ece": 0.004186,
+  "baseline_brier": 0.118231,
+  "irreducible_floor": 0.057406,
+  "desired_retention": 0.9,
+  "decay": 0.5,
+  "n_cards": 400,
+  "day_schedule": [1, 3, 7, 16, 35, 70, 140, 240, 400, 700],
+  "reliability_bins": [
+    {"mean_predicted_p": 0.065058, "empirical_accuracy": 0.055172, "n": 145},
+    {"mean_predicted_p": 0.143887, "empirical_accuracy": 0.150000, "n": 120},
+    {"mean_predicted_p": 0.242093, "empirical_accuracy": 0.229508, "n": 61},
+    {"mean_predicted_p": 0.336278, "empirical_accuracy": 0.313725, "n": 51},
+    {"mean_predicted_p": 0.454225, "empirical_accuracy": 0.434783, "n": 46},
+    {"mean_predicted_p": 0.561138, "empirical_accuracy": 0.441176, "n": 34},
+    {"mean_predicted_p": 0.655846, "empirical_accuracy": 0.574468, "n": 47},
+    {"mean_predicted_p": 0.750564, "empirical_accuracy": 0.708333, "n": 24},
+    {"mean_predicted_p": 0.867284, "empirical_accuracy": 0.865079, "n": 126},
+    {"mean_predicted_p": 0.957988, "empirical_accuracy": 0.958757, "n": 3346}
+  ]
+}

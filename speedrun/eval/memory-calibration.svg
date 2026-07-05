@@ -1,0 +1,56 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="640" height="520" viewBox="0 0 640 520" font-family="sans-serif">
+  <rect x="0" y="0" width="640" height="520" fill="#ffffff"/>
+  <text x="70" y="28" font-size="18" font-weight="bold" fill="#111">Memory-model calibration (SIMULATED FSRS review stream)</text>
+  <text x="70" y="50" font-size="12" fill="#555">Matched-model self-consistency — default FSRS params. NOT real human logs; near-optimal is expected.</text>
+  <text x="70" y="68" font-size="12" fill="#555">N=4000  base rate=0.863  Brier=0.0569  baseline Brier=0.1182  floor=0.0574  log-loss=0.2177  ECE=0.0042</text>
+  <rect x="70" y="90" width="540" height="360" fill="none" stroke="#ccc"/>
+  <line x1="70.0" y1="90.0" x2="70.0" y2="450.0" stroke="#eee"/>
+  <line x1="70.0" y1="450.0" x2="610.0" y2="450.0" stroke="#eee"/>
+  <text x="70.0" y="466.0" font-size="10" fill="#666" text-anchor="middle">0.0</text>
+  <text x="62.0" y="453.0" font-size="10" fill="#666" text-anchor="end">0.0</text>
+  <line x1="178.0" y1="90.0" x2="178.0" y2="450.0" stroke="#eee"/>
+  <line x1="70.0" y1="378.0" x2="610.0" y2="378.0" stroke="#eee"/>
+  <text x="178.0" y="466.0" font-size="10" fill="#666" text-anchor="middle">0.2</text>
+  <text x="62.0" y="381.0" font-size="10" fill="#666" text-anchor="end">0.2</text>
+  <line x1="286.0" y1="90.0" x2="286.0" y2="450.0" stroke="#eee"/>
+  <line x1="70.0" y1="306.0" x2="610.0" y2="306.0" stroke="#eee"/>
+  <text x="286.0" y="466.0" font-size="10" fill="#666" text-anchor="middle">0.4</text>
+  <text x="62.0" y="309.0" font-size="10" fill="#666" text-anchor="end">0.4</text>
+  <line x1="394.0" y1="90.0" x2="394.0" y2="450.0" stroke="#eee"/>
+  <line x1="70.0" y1="234.0" x2="610.0" y2="234.0" stroke="#eee"/>
+  <text x="394.0" y="466.0" font-size="10" fill="#666" text-anchor="middle">0.6</text>
+  <text x="62.0" y="237.0" font-size="10" fill="#666" text-anchor="end">0.6</text>
+  <line x1="502.0" y1="90.0" x2="502.0" y2="450.0" stroke="#eee"/>
+  <line x1="70.0" y1="162.0" x2="610.0" y2="162.0" stroke="#eee"/>
+  <text x="502.0" y="466.0" font-size="10" fill="#666" text-anchor="middle">0.8</text>
+  <text x="62.0" y="165.0" font-size="10" fill="#666" text-anchor="end">0.8</text>
+  <line x1="610.0" y1="90.0" x2="610.0" y2="450.0" stroke="#eee"/>
+  <line x1="70.0" y1="90.0" x2="610.0" y2="90.0" stroke="#eee"/>
+  <text x="610.0" y="466.0" font-size="10" fill="#666" text-anchor="middle">1.0</text>
+  <text x="62.0" y="93.0" font-size="10" fill="#666" text-anchor="end">1.0</text>
+  <text x="340.0" y="490.0" font-size="12" fill="#333" text-anchor="middle">Predicted probability (FSRS retrievability)</text>
+  <text x="20" y="270.0" font-size="12" fill="#333" text-anchor="middle" transform="rotate(-90 20 270.0)">Empirical accuracy</text>
+  <line x1="70.0" y1="450.0" x2="610.0" y2="90.0" stroke="#999" stroke-dasharray="5,4"/>
+  <text x="404.8" y="198.0" font-size="10" fill="#999">perfect calibration</text>
+  <polyline points="105.1,430.1 147.7,396.0 200.7,367.4 251.6,337.1 315.3,293.5 373.0,291.2 424.2,243.2 475.3,195.0 538.3,138.6 587.3,104.8 " fill="none" stroke="#1f77b4" stroke-width="2"/>
+  <circle cx="105.1" cy="430.1" r="4" fill="#1f77b4"/>
+  <text x="105.1" y="422.1" font-size="9" fill="#1f77b4" text-anchor="middle">n=145</text>
+  <circle cx="147.7" cy="396.0" r="4" fill="#1f77b4"/>
+  <text x="147.7" y="388.0" font-size="9" fill="#1f77b4" text-anchor="middle">n=120</text>
+  <circle cx="200.7" cy="367.4" r="4" fill="#1f77b4"/>
+  <text x="200.7" y="359.4" font-size="9" fill="#1f77b4" text-anchor="middle">n=61</text>
+  <circle cx="251.6" cy="337.1" r="4" fill="#1f77b4"/>
+  <text x="251.6" y="329.1" font-size="9" fill="#1f77b4" text-anchor="middle">n=51</text>
+  <circle cx="315.3" cy="293.5" r="4" fill="#1f77b4"/>
+  <text x="315.3" y="285.5" font-size="9" fill="#1f77b4" text-anchor="middle">n=46</text>
+  <circle cx="373.0" cy="291.2" r="4" fill="#1f77b4"/>
+  <text x="373.0" y="283.2" font-size="9" fill="#1f77b4" text-anchor="middle">n=34</text>
+  <circle cx="424.2" cy="243.2" r="4" fill="#1f77b4"/>
+  <text x="424.2" y="235.2" font-size="9" fill="#1f77b4" text-anchor="middle">n=47</text>
+  <circle cx="475.3" cy="195.0" r="4" fill="#1f77b4"/>
+  <text x="475.3" y="187.0" font-size="9" fill="#1f77b4" text-anchor="middle">n=24</text>
+  <circle cx="538.3" cy="138.6" r="4" fill="#1f77b4"/>
+  <text x="538.3" y="130.6" font-size="9" fill="#1f77b4" text-anchor="middle">n=126</text>
+  <circle cx="587.3" cy="104.8" r="4" fill="#1f77b4"/>
+  <text x="587.3" y="96.8" font-size="9" fill="#1f77b4" text-anchor="middle">n=3346</text>
+</svg>
