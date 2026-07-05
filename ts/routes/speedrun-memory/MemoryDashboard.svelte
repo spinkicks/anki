@@ -5,6 +5,8 @@ License: GNU AGPL, version 3 or later; http://www.gnu.org/licenses/agpl.html
 <script lang="ts">
     import { onMount } from "svelte";
 
+    import SpeedrunShell from "@speedrun/SpeedrunShell.svelte";
+
     import {
         type ExamProfile,
         loadCoverage,
@@ -68,14 +70,9 @@ License: GNU AGPL, version 3 or later; http://www.gnu.org/licenses/agpl.html
     })();
 </script>
 
+<SpeedrunShell active="memory">
 <div class="memory">
     <header>
-        <!-- Back to Home. Symmetric with Home's `<a href="/speedrun-memory">
-             MEMORY ▸</a>` forward link — same SvelteKit client-side route, so it
-             works on BOTH desktop (Qt webview) and Android (PageFragment webview)
-             with zero native code. (The `open:memory` Qt bridge handler is unused
-             dead code; the real nav is anchor-based.) -->
-        <a class="home-link" href="/speedrun-home">‹ HOME</a>
         <div class="titlebar">
             <h1>Memory</h1>
             <button on:click={refresh}>Refresh</button>
@@ -128,24 +125,12 @@ License: GNU AGPL, version 3 or later; http://www.gnu.org/licenses/agpl.html
         {/if}
     {/if}
 </div>
+</SpeedrunShell>
 
 <style>
-    /* Design tokens — mirror "The Run" dark palette so Memory matches Home. */
     .memory {
-        /* Manrope self-hosted (OFL woff2 bundled offline via base.scss
-           @font-face — 500 body/numerals, 800 headings). Mirrors Home. */
-        --disp: "Manrope", "Segoe UI", system-ui, sans-serif;
-        --mono:
-            "IBM Plex Mono", ui-monospace, "Cascadia Mono", "Segoe UI Mono",
-            "Roboto Mono", monospace;
-
-        --ink: #0b0e12;
-        --panel: #12161c;
-        --line: #232a33;
-        --fg: #e6eaef;
-        --muted: #7c8794;
-        --pace: #f4f7fa;
-
+        /* Design tokens (--ink/--pace/--disp/etc.) are owned by SpeedrunShell
+           and inherited here; this page only sets layout. */
         /* Mobile-first base: full width, compact padding */
         width: 100%;
         padding: 12px;
@@ -162,29 +147,6 @@ License: GNU AGPL, version 3 or later; http://www.gnu.org/licenses/agpl.html
             padding: 16px;
             border-left: 1px solid var(--line);
             border-right: 1px solid var(--line);
-        }
-    }
-    /* Back-to-Home affordance. Mirrors Home's forward "MEMORY ▸" link style
-       (muted uppercase, widens tracking, brightens on hover/focus). Sized as a
-       ≥44px touch target on mobile. */
-    .home-link {
-        display: inline-flex;
-        align-items: center;
-        min-height: 44px;
-        font-family: var(--disp);
-        font-size: 11px;
-        letter-spacing: 0.18em;
-        color: var(--muted);
-        text-decoration: none;
-        text-transform: uppercase;
-    }
-    .home-link:hover,
-    .home-link:focus-visible {
-        color: var(--fg);
-    }
-    @media (min-width: 768px) {
-        .home-link {
-            min-height: 0;
         }
     }
     .titlebar {

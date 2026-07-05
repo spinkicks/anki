@@ -8,6 +8,9 @@ mastery; abstaining topics stay grey and show no fabricated number.
 -->
 <script lang="ts">
     import { onMount } from "svelte";
+
+    import SpeedrunShell from "@speedrun/SpeedrunShell.svelte";
+
     import { probeAiAvailability, requestGenerate } from "./ai";
     import { loadMap } from "./data";
     import {
@@ -118,13 +121,10 @@ mastery; abstaining topics stay grey and show no fabricated number.
     }
 </script>
 
+<SpeedrunShell active="map">
 <div class="map">
     <header>
-        <div class="brand">
-            <span class="wordmark">SPEED<span class="pace">RUN</span></span>
-            <span class="crumb">· THE MAP</span>
-        </div>
-        <a class="home-link" href="/speedrun-home">‹ HOME</a>
+        <h1>The Map</h1>
     </header>
 
     <p class="lede">
@@ -263,16 +263,12 @@ mastery; abstaining topics stay grey and show no fabricated number.
         {/if}
     {/if}
 </div>
+</SpeedrunShell>
 
 <style>
     .map {
-        --ink: #0b0e12;
-        --panel: #12161c;
-        --line: #232a33;
-        --fg: #e6eaef;
-        --muted: #7c8794;
-        --pace: #f4f7fa;
-        --disp: "Manrope", "Segoe UI", system-ui, sans-serif;
+        /* Design tokens (--ink/--pace/--disp/etc.) are owned by SpeedrunShell
+           and inherited here; this page only sets layout. */
         background: var(--ink);
         color: var(--fg);
         font-family: var(--disp);
@@ -291,33 +287,13 @@ mastery; abstaining topics stay grey and show no fabricated number.
     header {
         display: flex;
         align-items: center;
-        justify-content: space-between;
         gap: 12px;
     }
-    .wordmark {
+    header h1 {
+        font-size: 18px;
         font-weight: 800;
-        letter-spacing: 0.02em;
-        font-size: 20px;
-    }
-    .pace {
-        color: var(--pace);
-    }
-    .crumb {
-        color: var(--muted);
-        font-weight: 800;
-        font-size: 13px;
-        margin-left: 6px;
-    }
-    .home-link {
-        color: var(--muted);
-        text-decoration: none;
-        font-weight: 800;
-        font-size: 13px;
-        min-height: 44px;
-        display: inline-flex;
-        align-items: center;
-    }
-    .home-link:hover {
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
         color: var(--fg);
     }
     .lede {

@@ -225,22 +225,6 @@ calmly. Reuses the frozen SpeedrunService RPCs via @speedrun/data.
         border-top: 1px solid var(--line);
         text-transform: uppercase;
     }
-    .memory-link {
-        padding: 0 28px 26px;
-    }
-    .memory-link a {
-        font-family: var(--disp);
-        font-size: 11px;
-        letter-spacing: 0.18em;
-        color: var(--muted);
-        text-decoration: none;
-        text-transform: uppercase;
-    }
-    .memory-link a:hover,
-    .memory-link a:focus-visible {
-        color: var(--fg);
-    }
-
     /* START RUN status banner (flat/sharp; tokens only). Driven by the Qt
        shell via window.speedrunStartStatus when it can't launch study. */
     .startstatus {
