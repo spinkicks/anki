@@ -21,6 +21,7 @@ from aqt.speedrun_logic import (
     decide_mini_mock,
     decide_start_run,
     maybe_import_seed_deck,
+    resolve_mini_mock_size,
     speedrun_seed_apkg_path,
 )
 
@@ -270,6 +271,71 @@ def test_build_mini_mock_deck_reuses_existing_no_orphans() -> None:
         # Still a filtered deck with reschedule=True after the in-place update.
         deck = col.sched.get_or_create_filtered_deck(DeckId(mock_decks[0].id))
         assert deck.config.reschedule is True
+    finally:
+        col.close()
+
+
+# ---- P2-b: defensive mini-mock size resolution from (possibly bad) config ----
+#
+# _start_mini_mock read the size as int(col.get_config("speedrun:mini_mock_size",
+# 10)). get_config's default only fires when the key is ABSENT; a PRESENT JSON
+# null / non-numeric string / decimal string makes int(...) raise BEFORE the
+# clamp, with no surrounding guard -> the mini-mock launch crashes. A synced
+# collection can carry such a value. resolve_mini_mock_size must coerce
+# defensively (fall back to the default), THEN clamp — never raise.
+
+
+def test_resolve_mini_mock_size_absent_key_uses_default() -> None:
+    col = _empty_col()
+    try:
+        # Key never set -> the default flows through and clamps to itself.
+        assert resolve_mini_mock_size(col, default=10) == 10
+    finally:
+        col.close()
+
+
+def test_resolve_mini_mock_size_null_config_falls_back_to_default() -> None:
+    # A PRESENT JSON null (not absent) previously reached int(None) -> TypeError.
+    col = _empty_col()
+    try:
+        col.set_config("speedrun:mini_mock_size", None)
+        assert resolve_mini_mock_size(col, default=10) == 10
+    finally:
+        col.close()
+
+
+def test_resolve_mini_mock_size_non_numeric_string_falls_back() -> None:
+    # A non-numeric string previously reached int("abc") -> ValueError.
+    col = _empty_col()
+    try:
+        col.set_config("speedrun:mini_mock_size", "abc")
+        assert resolve_mini_mock_size(col, default=10) == 10
+    finally:
+        col.close()
+
+
+def test_resolve_mini_mock_size_decimal_string_falls_back() -> None:
+    # A decimal string ("7.5") is also not int-parseable -> fall back, don't crash.
+    col = _empty_col()
+    try:
+        col.set_config("speedrun:mini_mock_size", "7.5")
+        assert resolve_mini_mock_size(col, default=10) == 10
+    finally:
+        col.close()
+
+
+def test_resolve_mini_mock_size_valid_value_is_clamped() -> None:
+    # A valid numeric config value flows through the clamp (still >=1, <=cap).
+    col = _empty_col()
+    try:
+        col.set_config("speedrun:mini_mock_size", 3)
+        assert resolve_mini_mock_size(col, default=10) == 3
+        # Numeric string that IS int-parseable is honoured too.
+        col.set_config("speedrun:mini_mock_size", "5")
+        assert resolve_mini_mock_size(col, default=10) == 5
+        # Out-of-range valid ints still clamp (0 -> floor 1).
+        col.set_config("speedrun:mini_mock_size", 0)
+        assert resolve_mini_mock_size(col, default=10) == 1
     finally:
         col.close()
 

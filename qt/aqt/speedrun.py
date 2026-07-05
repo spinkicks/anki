@@ -194,16 +194,17 @@ class SpeedrunHome(QDialog):
         # Android timed mini-mock UI is DEFERRED this cycle (no anki-android code).
         from aqt.speedrun_logic import (
             build_mini_mock_deck,
-            clamp_mini_mock_size,
             decide_mini_mock,
+            resolve_mini_mock_size,
         )
 
-        # Clamp the config value here (defense-in-depth; build_mini_mock_deck also
-        # clamps): a 0/negative size would make the filtered-deck search-term
-        # limit=0, pulling zero cards -> FilteredDeckError -> the launch crashes.
-        size = clamp_mini_mock_size(
-            int(self.mw.col.get_config("speedrun:mini_mock_size", 10))
-        )
+        # Resolve the config value defensively (defense-in-depth; build_mini_mock_deck
+        # also clamps): a 0/negative size would make the filtered-deck search-term
+        # limit=0, pulling zero cards -> FilteredDeckError -> the launch crashes; and
+        # a PRESENT-but-bad synced value (JSON null / "abc" / "7.5") would make a bare
+        # int(...) raise before the clamp. resolve_mini_mock_size coerces + clamps
+        # without ever raising.
+        size = resolve_mini_mock_size(self.mw.col)
         decision = decide_mini_mock(self.mw.col, self.PROBLEM_DECK)
         if decision.status == "importNeeded":
             self.web.eval(
