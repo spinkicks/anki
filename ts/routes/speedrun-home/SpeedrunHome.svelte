@@ -10,6 +10,8 @@ calmly. Reuses the frozen SpeedrunService RPCs via @speedrun/data.
 <script lang="ts">
     import { onDestroy, onMount } from "svelte";
 
+    import SpeedrunShell from "@speedrun/SpeedrunShell.svelte";
+
     import ActionBar from "./ActionBar.svelte";
     import { type HomeView, loadHome } from "./data";
     import RunHeader from "./RunHeader.svelte";
@@ -75,6 +77,7 @@ calmly. Reuses the frozen SpeedrunService RPCs via @speedrun/data.
     });
 </script>
 
+<SpeedrunShell active="home">
 <div class="app">
     {#if startStatus}
         <div class="startstatus" role="status">
@@ -173,32 +176,15 @@ calmly. Reuses the frozen SpeedrunService RPCs via @speedrun/data.
                  this, so it lives here as a general caveat on the pace framing. -->
             Pace reflects your run so far — not a promised outcome; results vary.
         </div>
-        <div class="memory-link">
-            <a href="/speedrun-map">THE MAP ▸</a>
-            <a href="/speedrun-memory">MEMORY ▸</a>
-        </div>
     {/if}
 </div>
+</SpeedrunShell>
 
 <style>
-    /* Design tokens (flat/sharp: no rounded corners, no gradients, no glow). */
+    /* Design tokens (--ink/--pace/--disp/etc.) are owned by SpeedrunShell and
+       inherited here; this page only sets layout. Flat/sharp: no rounded
+       corners, no gradients, no glow. */
     .app {
-        /* Fonts (offline-safe): Manrope is self-hosted (OFL woff2 bundled in
-           the SvelteKit _app output via base.scss @font-face — 500 body/numerals,
-           800 wordmark/headings); strong system fallbacks otherwise. We do NOT
-           fetch fonts from the network (webview must work offline). */
-        --disp: "Manrope", "Segoe UI", system-ui, sans-serif;
-        --mono:
-            "IBM Plex Mono", ui-monospace, "Cascadia Mono", "Segoe UI Mono",
-            "Roboto Mono", monospace;
-
-        --ink: #0b0e12;
-        --panel: #12161c;
-        --line: #232a33;
-        --fg: #e6eaef;
-        --muted: #7c8794;
-        --pace: #f4f7fa;
-
         /* Mobile-first base: full width, no side borders */
         width: 100%;
         min-height: 100vh;
