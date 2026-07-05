@@ -34,6 +34,24 @@ wheels:
 check:
     {{ ninja }} pylib qt check
 
+# §7h latency microbench: build a ~50k-card deck and print p50/p95/worst for
+# button-ack, next-card, dashboard load, dashboard refresh vs the PRD §10 targets
+# (honest PASS/MISS; sync is documented, not benched). Runs in release for
+# representative numbers. Override deck size with SPEEDRUN_BENCH_CARDS.
+# Respects a pre-set PROTOC / CARGO_TARGET_DIR; else derives sane repo defaults.
+[windows]
+bench:
+    #!pwsh
+    if (-not $env:PROTOC) { $env:PROTOC = (Resolve-Path "out\extracted\protoc\bin\protoc.exe").Path }
+    cargo test -p anki --release speedrun::bench::harness::bench_speedrun_ops -- --nocapture --ignored
+
+[unix]
+bench:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    export PROTOC="${PROTOC:-$PWD/out/extracted/protoc/bin/protoc}"
+    cargo test -p anki --release speedrun::bench::harness::bench_speedrun_ops -- --nocapture --ignored
+
 # Run all tests (Rust, Python, TypeScript). Pass --coverage to enforce coverage, and --html to include HTML reports.
 [arg("coverage", long="coverage", value="--coverage")]
 [arg("html", long="html", value="--html")]
