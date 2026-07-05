@@ -214,7 +214,18 @@ def format_choices(choices: list[str]) -> str:
 def _valid_problem(p: dict[str, Any]) -> bool:
     """A problem is importable only if it carries the fields we need to build a
     scorable note: a non-empty stem, a choices list, and a correct-answer letter
-    in A-E. Trust nothing — a half-formed payload is skipped, never half-imported."""
+    in A-E that INDEXES AN ACTUALLY RENDERED CHOICE. Trust nothing — a half-formed
+    payload is skipped, never half-imported.
+
+    ``format_choices`` renders exactly one button per choice by zipping the choice
+    list against ``CHOICE_LETTERS`` (A-E). So a key that is a valid letter but
+    indexes no rendered choice (e.g. ``correct_answer="D"`` with only 3 choices,
+    or any key when ``len(choices) > len(CHOICE_LETTERS)`` silently drops the
+    overflow) would import an entry the learner can NEVER answer correctly:
+    ``reconcile_mcq`` grades ``chosen == key`` False on every attempt, polluting
+    the OBJECTIVE ``speedrun:mcq_attempts`` Performance signal with an unwinnable
+    row. Reject such a problem here (this consistency check is the module's job —
+    the contract is "trust nothing" from the external service)."""
     stem = p.get("stem")
     choices = p.get("choices")
     correct = p.get("correct_answer")
@@ -222,7 +233,17 @@ def _valid_problem(p: dict[str, Any]) -> bool:
         return False
     if not isinstance(choices, list) or not choices:
         return False
-    if not isinstance(correct, str) or correct.strip().upper() not in CHOICE_LETTERS:
+    # More choices than renderable letters => the overflow is silently dropped
+    # by format_choices (a misleading MCQ). Only up to len(CHOICE_LETTERS) render.
+    if len(choices) > len(CHOICE_LETTERS):
+        return False
+    if not isinstance(correct, str):
+        return False
+    letter = correct.strip().upper()
+    if letter not in CHOICE_LETTERS:
+        return False
+    # The key must index an actually rendered choice: 0 <= index < len(choices).
+    if CHOICE_LETTERS.index(letter) >= len(choices):
         return False
     return True
 
