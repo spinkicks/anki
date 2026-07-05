@@ -35,8 +35,14 @@ License: GNU AGPL, version 3 or later; http://www.gnu.org/licenses/agpl.html
 </script>
 
 <div class="action">
-    <button class="run" on:click={onStartRun}>► START RUN</button>
-    <button class="mock" on:click={onMiniMock}>MINI-MOCK</button>
+    <!-- START RUN / MINI-MOCK live in the persistent sidebar (SpeedrunShell) on
+         desktop, so these in-page buttons are hidden there to avoid duplication.
+         On mobile the sidebar collapses to a nav-only top bar (Practice actions
+         hidden), so these remain the mobile action surface. -->
+    <div class="cta">
+        <button class="run" on:click={onStartRun}>► START RUN</button>
+        <button class="mock" on:click={onMiniMock}>MINI-MOCK</button>
+    </div>
     {#if weakestTimed}
         <div class="next">
             NEXT SEGMENT · <b>{weakestTimed}</b>
@@ -71,6 +77,17 @@ License: GNU AGPL, version 3 or later; http://www.gnu.org/licenses/agpl.html
             align-items: center;
             gap: 20px;
             padding: 22px 28px;
+        }
+    }
+    /* Mobile: the button pair participates directly in the .action column
+       (full-width stacked). Desktop: hidden — the sidebar owns Start Run /
+       Mini-mock, so only the honest pace/difficulty hints remain here. */
+    .cta {
+        display: contents;
+    }
+    @media (min-width: 768px) {
+        .cta {
+            display: none;
         }
     }
     .run {
