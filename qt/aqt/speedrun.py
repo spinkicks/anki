@@ -14,41 +14,37 @@ from aqt.utils import disable_help_button, restoreGeom, saveGeom
 from aqt.webview import AnkiWebView, AnkiWebViewKind
 
 
-class SpeedrunMemory(QDialog):
+class _SpeedrunBridgeDialog(QDialog):
+    """Shared base for the Speedrun webview dialogs (Home and Memory).
+
+    Both host a SvelteKit page in the SAME persistent sidebar shell, which shows
+    the Practice actions (Start Run / Mini-mock) and the AI "Generate practice"
+    button on EVERY page and fires them via ``(pycmd ?? bridgeCommand)(cmd)``. On
+    desktop the webview always has ``pycmd`` (Qt injects it globally), so those
+    buttons render ENABLED on Memory too — they must therefore ACT, not no-op.
+
+    So the bridge-command wiring (``set_bridge_command``) + ``_on_bridge_cmd``
+    dispatch + all the action methods live here, shared by both subclasses. Each
+    subclass supplies only its own registry name / geometry key, window title,
+    SvelteKit page and default size (via class attributes below). Keeping the
+    wiring in ONE place also guarantees the desktop pycmd===bridgeCommand alias
+    can't be turned into a double-dispatch: there is a single set_bridge_command
+    call, inherited by both dialogs."""
+
+    # Subclasses override these four. ``DIALOG_NAME`` is BOTH the aqt.dialogs
+    # registry key and the geometry-save key, so it must match the name the class
+    # is registered under in aqt/__init__.py (which equals the class name).
+    DIALOG_NAME = ""
+    WINDOW_TITLE = ""
+    SVELTE_PAGE = ""
+    DEFAULT_SIZE = (1000, 820)
+
     def __init__(self, mw: aqt.main.AnkiQt) -> None:
         QDialog.__init__(self, mw, Qt.WindowType.Window)
         mw.garbage_collect_on_dialog_finish(self)
         self.mw = mw
-        self.name = "speedrunMemory"
-        self.setWindowTitle("Speedrun: Memory")
-        disable_help_button(self)
-        self.web = AnkiWebView(kind=AnkiWebViewKind.SPEEDRUN)
-        layout = QVBoxLayout()
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.addWidget(self.web)
-        self.setLayout(layout)
-        restoreGeom(self, self.name, default_size=(900, 800))
-        self.web.load_sveltekit_page("speedrun-memory")
-        self.show()
-
-    def reject(self) -> None:
-        self.web.cleanup()
-        saveGeom(self, self.name)
-        aqt.dialogs.markClosed("SpeedrunMemory")
-        QDialog.reject(self)
-
-    def closeWithCallback(self, callback: Callable[[], None]) -> None:
-        self.reject()
-        callback()
-
-
-class SpeedrunHome(QDialog):
-    def __init__(self, mw: aqt.main.AnkiQt) -> None:
-        QDialog.__init__(self, mw, Qt.WindowType.Window)
-        mw.garbage_collect_on_dialog_finish(self)
-        self.mw = mw
-        self.name = "speedrunHome"
-        self.setWindowTitle("Speedrun: Home")
+        self.name = self.DIALOG_NAME
+        self.setWindowTitle(self.WINDOW_TITLE)
         disable_help_button(self)
         self.web = AnkiWebView(kind=AnkiWebViewKind.SPEEDRUN)
         self.web.set_bridge_command(self._on_bridge_cmd, self)
@@ -56,8 +52,8 @@ class SpeedrunHome(QDialog):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.addWidget(self.web)
         self.setLayout(layout)
-        restoreGeom(self, self.name, default_size=(1000, 820))
-        self.web.load_sveltekit_page("speedrun-home")
+        restoreGeom(self, self.name, default_size=self.DEFAULT_SIZE)
+        self.web.load_sveltekit_page(self.SVELTE_PAGE)
         self.show()
 
     # The exam deck the run studies. Grounded fact: this is the seed deck name.
@@ -260,9 +256,29 @@ class SpeedrunHome(QDialog):
     def reject(self) -> None:
         self.web.cleanup()
         saveGeom(self, self.name)
-        aqt.dialogs.markClosed("SpeedrunHome")
+        # The aqt.dialogs registry key equals the concrete class name
+        # (SpeedrunHome / SpeedrunMemory), so mark THIS dialog closed.
+        aqt.dialogs.markClosed(type(self).__name__)
         QDialog.reject(self)
 
     def closeWithCallback(self, callback: Callable[[], None]) -> None:
         self.reject()
         callback()
+
+
+class SpeedrunHome(_SpeedrunBridgeDialog):
+    DIALOG_NAME = "speedrunHome"
+    WINDOW_TITLE = "Speedrun: Home"
+    SVELTE_PAGE = "speedrun-home"
+    DEFAULT_SIZE = (1000, 820)
+
+
+class SpeedrunMemory(_SpeedrunBridgeDialog):
+    # Same bridge handling as Home (inherited): the merged sidebar shows the
+    # Practice/Generate actions on the Memory page too, so they must ACT here —
+    # previously SpeedrunMemory never wired set_bridge_command and the buttons
+    # no-op'd. Only the page/title/geometry differ.
+    DIALOG_NAME = "speedrunMemory"
+    WINDOW_TITLE = "Speedrun: Memory"
+    SVELTE_PAGE = "speedrun-memory"
+    DEFAULT_SIZE = (900, 800)
