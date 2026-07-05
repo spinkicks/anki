@@ -238,8 +238,18 @@ impl crate::services::SpeedrunService for Collection {
                 if let Some(state) = card.memory_state {
                     let elapsed = card.seconds_since_last_review(&timing).unwrap_or_default();
                     let decay = card.decay.unwrap_or(FSRS5_DEFAULT_DECAY);
-                    let r = fsrs.current_retrievability_seconds(state.into(), elapsed, decay);
-                    retrievabilities.push(r as f64);
+                    let r = fsrs.current_retrievability_seconds(state.into(), elapsed, decay) as f64;
+                    // Honesty guard: a persisted memory_state with stability == 0.0
+                    // (reachable via UpdateCards RPC / import / add-on / older data;
+                    // the read-path formula does NOT clamp stability) yields a
+                    // non-finite retrievability (NaN when elapsed == 0, ±Inf when
+                    // elapsed > 0). Treat that as NO usable data — skip it exactly
+                    // like a card with no memory_state — so avg_recall, the mean_ci
+                    // band, and the abstain gate (cards_with_data) are computed over
+                    // finite values only. Dropping corrupt data => honest abstain.
+                    if r.is_finite() {
+                        retrievabilities.push(r);
+                    }
                 }
                 Ok(())
             })?;
@@ -366,7 +376,13 @@ impl crate::services::SpeedrunService for Collection {
         let mut topics_out = Vec::with_capacity(input.topics.len());
         // (weight, performance point) for topics with a real Performance number.
         let mut ability_terms: Vec<(f64, f64)> = Vec::new();
-        let mut total_attempts = 0u32;
+        // Attempts that actually FEED the ability POINT estimate (scored AND
+        // weight > 0). The conformal margin (readiness band WIDTH) MUST use this
+        // point-consistent count, not the sum over every requested topic: attempts
+        // from abstained topics (attempts < min) or weight == 0 topics never enter
+        // the point, so folding them into the margin would tighten the interval on
+        // evidence the point never saw — claiming more precision than the evidence.
+        let mut ability_attempts = 0u32;
         let mut covered = 0u32;
         let mut any_real = false;
         let mut overall_newest_secs = 0i64;
@@ -374,7 +390,6 @@ impl crate::services::SpeedrunService for Collection {
         for topic in &input.topics {
             let (recall_n, recall) = self.topic_recall(topic, &timing, &fsrs)?;
             let (attempts, correct, newest_ms) = self.topic_problem_stats(topic)?;
-            total_attempts += attempts;
             overall_newest_secs = overall_newest_secs.max(newest_ms / 1000);
             // Coverage must be PROBLEM-based (PRD): a topic only counts once it has
             // enough timed problem attempts to yield a real Performance number. Using
@@ -394,6 +409,9 @@ impl crate::services::SpeedrunService for Collection {
                 any_real = true;
                 if weight > 0.0 {
                     ability_terms.push((weight, acc));
+                    // Count these attempts toward the margin ONLY — they are the
+                    // exact attempts behind the ability point estimate.
+                    ability_attempts += attempts;
                 }
                 ScoreScaffold {
                     point: acc,
@@ -468,7 +486,7 @@ impl crate::services::SpeedrunService for Collection {
             let margin = conformal_margin(
                 cfg.readiness.conformal.base_margin,
                 cfg.readiness.conformal.widen_k,
-                total_attempts,
+                ability_attempts,
             );
             let width = 2.0 * margin;
             if width >= g.max_interval_width {
@@ -626,7 +644,14 @@ impl Collection {
             if let Some(state) = card.memory_state {
                 let elapsed = card.seconds_since_last_review(timing).unwrap_or_default();
                 let decay = card.decay.unwrap_or(FSRS5_DEFAULT_DECAY);
-                rs.push(fsrs.current_retrievability_seconds(state.into(), elapsed, decay) as f64);
+                let r = fsrs.current_retrievability_seconds(state.into(), elapsed, decay) as f64;
+                // Honesty guard (mirrors get_topic_mastery): a stability == 0.0
+                // memory_state yields a non-finite retrievability; drop it as NO
+                // usable data so recall (and the §7d gap_delta = recall -
+                // performance.point) is always computed over finite values only.
+                if r.is_finite() {
+                    rs.push(r);
+                }
             }
             Ok(())
         })?;
