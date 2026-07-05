@@ -362,3 +362,88 @@ def test_parse_generate_response_bad_payload_is_empty() -> None:
     assert speedrun_ai.parse_generate_response({"status": "error"}) == []
     assert speedrun_ai.parse_generate_response({"status": "ok"}) == []
     assert speedrun_ai.parse_generate_response({"problems": "nope"}) == []
+
+
+# ---- In-app "Enable AI generation (this session)" toggle ------------------
+# The Tools-menu toggle flips an in-process session flag so a grader on the MSI
+# (no OS env var) can enable the ⚡ button WITHOUT setting SPEEDRUN_AI_ENABLED.
+# Honesty invariants under test: default OFF = zero behaviour change; the toggle
+# only flips the desktop enable flag (the /health probe still gates); the OS-env
+# path is unchanged; "this session" = resets when set back off / on restart.
+
+
+def test_session_ai_enabled_default_off_zero_behavior_change(monkeypatch) -> None:
+    monkeypatch.delenv("SPEEDRUN_AI_ENABLED", raising=False)
+    speedrun_ai.set_session_ai_enabled(False)
+    try:
+        assert not speedrun_ai.session_ai_enabled()
+        assert not speedrun_ai.master_enabled()
+        # Master switch off => not available even if /health would report enabled.
+        assert not speedrun_ai.ai_available(
+            env_enabled=speedrun_ai.master_enabled(),
+            probe=lambda: {"ai_enabled": True},
+        )
+    finally:
+        speedrun_ai.set_session_ai_enabled(False)
+
+
+def test_session_toggle_enables_master_without_env(monkeypatch) -> None:
+    monkeypatch.delenv("SPEEDRUN_AI_ENABLED", raising=False)
+    speedrun_ai.set_session_ai_enabled(True)
+    try:
+        assert speedrun_ai.session_ai_enabled()
+        # Master switch on via the session flag alone — no OS env var set.
+        assert not speedrun_ai.env_enabled()
+        assert speedrun_ai.master_enabled()
+        assert speedrun_ai.ai_available(
+            env_enabled=speedrun_ai.master_enabled(),
+            probe=lambda: {"ai_enabled": True},
+        )
+    finally:
+        speedrun_ai.set_session_ai_enabled(False)
+
+
+def test_session_toggle_still_gated_on_health(monkeypatch) -> None:
+    # Honesty: the toggle flips only the enable flag; the /health probe still gates.
+    monkeypatch.delenv("SPEEDRUN_AI_ENABLED", raising=False)
+    speedrun_ai.set_session_ai_enabled(True)
+    try:
+        assert not speedrun_ai.ai_available(
+            env_enabled=speedrun_ai.master_enabled(), probe=lambda: None
+        )
+        assert not speedrun_ai.ai_available(
+            env_enabled=speedrun_ai.master_enabled(),
+            probe=lambda: {"ai_enabled": False},
+        )
+    finally:
+        speedrun_ai.set_session_ai_enabled(False)
+
+
+def test_session_toggle_off_reverts(monkeypatch) -> None:
+    monkeypatch.delenv("SPEEDRUN_AI_ENABLED", raising=False)
+    speedrun_ai.set_session_ai_enabled(True)
+    speedrun_ai.set_session_ai_enabled(False)
+    assert not speedrun_ai.session_ai_enabled()
+    assert not speedrun_ai.master_enabled()
+
+
+def test_env_var_alone_still_enables_master(monkeypatch) -> None:
+    # The OS-env path is unchanged: env truthy => master on even with session off.
+    speedrun_ai.set_session_ai_enabled(False)
+    monkeypatch.setenv("SPEEDRUN_AI_ENABLED", "1")
+    try:
+        assert speedrun_ai.master_enabled()
+    finally:
+        monkeypatch.delenv("SPEEDRUN_AI_ENABLED", raising=False)
+
+
+def test_is_ai_available_uses_session_toggle(monkeypatch) -> None:
+    monkeypatch.delenv("SPEEDRUN_AI_ENABLED", raising=False)
+    monkeypatch.setattr(speedrun_ai, "probe_health", lambda: {"ai_enabled": True})
+    speedrun_ai.set_session_ai_enabled(False)
+    try:
+        assert not speedrun_ai.is_ai_available()  # off by default
+        speedrun_ai.set_session_ai_enabled(True)
+        assert speedrun_ai.is_ai_available()  # session toggle enables it
+    finally:
+        speedrun_ai.set_session_ai_enabled(False)

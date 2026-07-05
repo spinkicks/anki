@@ -72,6 +72,37 @@ def env_enabled() -> bool:
     return val not in ("", "0", "false", "no", "off")
 
 
+# ---- In-app session toggle ("Enable AI generation (this session)") --------
+#
+# A grader who launches the packaged MSI has no ``SPEEDRUN_AI_ENABLED`` env var,
+# so the ⚡ button would stay disabled with no way to turn it on. The Tools-menu
+# toggle flips this IN-MEMORY, per-process flag so the master switch can be
+# enabled WITHOUT an OS env var. Honesty is preserved: this only flips the
+# desktop *enable* flag — it does NOT supply the OpenAI key (still in the
+# service's ``.env``) and does NOT bypass the ``/health`` probe (``ai_available``
+# still requires the service to report ``ai_enabled``). It is in-memory only, so
+# it resets to OFF on restart ("this session"); default OFF => zero behaviour
+# change (kill-switch intact).
+_session_ai_enabled: bool = False
+
+
+def set_session_ai_enabled(on: bool) -> None:
+    """Set the in-process 'AI enabled this session' flag (the Tools-menu toggle)."""
+    global _session_ai_enabled
+    _session_ai_enabled = bool(on)
+
+
+def session_ai_enabled() -> bool:
+    """True iff the in-app toggle has enabled AI for this session."""
+    return _session_ai_enabled
+
+
+def master_enabled() -> bool:
+    """The OFF-by-default master switch: the OS env var (:func:`env_enabled`) OR
+    the in-app session toggle. Neither set => False => zero behaviour change."""
+    return env_enabled() or session_ai_enabled()
+
+
 # ---- Availability ---------------------------------------------------------
 
 
@@ -105,8 +136,9 @@ def probe_health() -> Optional[dict[str, Any]]:
 
 
 def is_ai_available() -> bool:
-    """Full availability check for the running app: env switch AND live /health."""
-    return ai_available(env_enabled=env_enabled(), probe=probe_health)
+    """Full availability check for the running app: the master switch (OS env OR
+    the in-app session toggle) AND a live /health probe."""
+    return ai_available(env_enabled=master_enabled(), probe=probe_health)
 
 
 # ---- HTTP seam (stdlib urllib; no new dependency) -------------------------

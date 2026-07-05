@@ -1336,6 +1336,29 @@ title="{}" {}>{}</button>""".format(
     def onSpeedrunHome(self) -> None:
         aqt.dialogs.open("SpeedrunHome", self)
 
+    def _setup_speedrun_ai_toggle(self, m: Any) -> None:
+        # Checkable Tools-menu item that enables AI generation for THIS session
+        # without an OS env var, so a grader on the packaged MSI can turn on the
+        # ⚡ Generate button. OFF by default (kill-switch intact); it only flips
+        # the desktop enable flag — the OpenAI key still lives in the
+        # speedrun-ai service's .env, the service must be running, and the Map's
+        # /health probe still gates availability. In-memory only => resets on
+        # restart. See aqt.speedrun_ai.set_session_ai_enabled.
+        from aqt import speedrun_ai
+
+        action = QAction("Enable AI generation (this session)", self)
+        action.setCheckable(True)
+        action.setChecked(speedrun_ai.session_ai_enabled())
+        action.setToolTip(
+            "Requires the speedrun-ai service running (its OpenAI key stays in "
+            "the service .env). This session only; off by default."
+        )
+        qconnect(action.toggled, speedrun_ai.set_session_ai_enabled)
+        # Keep a reference so the action isn't collected; add after the Speedrun
+        # items in the Tools menu.
+        self.action_speedrun_ai_toggle = action
+        m.menuTools.addAction(action)
+
     def _maybe_import_speedrun_seed(self) -> None:
         # First-run convenience: import the bundled GRE-Math seed deck so a fresh
         # install (e.g. a grader's) has the deck already loaded — no manual
@@ -1491,6 +1514,7 @@ title="{}" {}>{}</button>""".format(
         qconnect(m.actionPreferences.triggered, self.onPrefs)
         qconnect(m.actionSpeedrunMemory.triggered, self.onSpeedrunMemory)
         qconnect(m.actionSpeedrunHome.triggered, self.onSpeedrunHome)
+        self._setup_speedrun_ai_toggle(m)
 
         # View
         qconnect(
