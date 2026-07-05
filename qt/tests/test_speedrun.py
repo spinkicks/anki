@@ -21,6 +21,7 @@ from aqt.speedrun_logic import (
     decide_mini_mock,
     decide_start_run,
     maybe_import_seed_deck,
+    resolve_mini_mock_size,
     speedrun_seed_apkg_path,
 )
 
@@ -270,6 +271,71 @@ def test_build_mini_mock_deck_reuses_existing_no_orphans() -> None:
         # Still a filtered deck with reschedule=True after the in-place update.
         deck = col.sched.get_or_create_filtered_deck(DeckId(mock_decks[0].id))
         assert deck.config.reschedule is True
+    finally:
+        col.close()
+
+
+# ---- P2-b: defensive mini-mock size resolution from (possibly bad) config ----
+#
+# _start_mini_mock read the size as int(col.get_config("speedrun:mini_mock_size",
+# 10)). get_config's default only fires when the key is ABSENT; a PRESENT JSON
+# null / non-numeric string / decimal string makes int(...) raise BEFORE the
+# clamp, with no surrounding guard -> the mini-mock launch crashes. A synced
+# collection can carry such a value. resolve_mini_mock_size must coerce
+# defensively (fall back to the default), THEN clamp — never raise.
+
+
+def test_resolve_mini_mock_size_absent_key_uses_default() -> None:
+    col = _empty_col()
+    try:
+        # Key never set -> the default flows through and clamps to itself.
+        assert resolve_mini_mock_size(col, default=10) == 10
+    finally:
+        col.close()
+
+
+def test_resolve_mini_mock_size_null_config_falls_back_to_default() -> None:
+    # A PRESENT JSON null (not absent) previously reached int(None) -> TypeError.
+    col = _empty_col()
+    try:
+        col.set_config("speedrun:mini_mock_size", None)
+        assert resolve_mini_mock_size(col, default=10) == 10
+    finally:
+        col.close()
+
+
+def test_resolve_mini_mock_size_non_numeric_string_falls_back() -> None:
+    # A non-numeric string previously reached int("abc") -> ValueError.
+    col = _empty_col()
+    try:
+        col.set_config("speedrun:mini_mock_size", "abc")
+        assert resolve_mini_mock_size(col, default=10) == 10
+    finally:
+        col.close()
+
+
+def test_resolve_mini_mock_size_decimal_string_falls_back() -> None:
+    # A decimal string ("7.5") is also not int-parseable -> fall back, don't crash.
+    col = _empty_col()
+    try:
+        col.set_config("speedrun:mini_mock_size", "7.5")
+        assert resolve_mini_mock_size(col, default=10) == 10
+    finally:
+        col.close()
+
+
+def test_resolve_mini_mock_size_valid_value_is_clamped() -> None:
+    # A valid numeric config value flows through the clamp (still >=1, <=cap).
+    col = _empty_col()
+    try:
+        col.set_config("speedrun:mini_mock_size", 3)
+        assert resolve_mini_mock_size(col, default=10) == 3
+        # Numeric string that IS int-parseable is honoured too.
+        col.set_config("speedrun:mini_mock_size", "5")
+        assert resolve_mini_mock_size(col, default=10) == 5
+        # Out-of-range valid ints still clamp (0 -> floor 1).
+        col.set_config("speedrun:mini_mock_size", 0)
+        assert resolve_mini_mock_size(col, default=10) == 1
     finally:
         col.close()
 
@@ -900,3 +966,100 @@ def test_speedrun_seed_apkg_path_none_when_nowhere(tmp_path, monkeypatch) -> Non
     monkeypatch.setattr(sl, "_dev_repo_seed_paths", lambda: [])
 
     assert speedrun_seed_apkg_path() is None
+
+
+# ---- Part B: SpeedrunMemory bridge parity with SpeedrunHome ----
+#
+# The merged sidebar shows Practice actions (Start Run / Mini-mock) on ALL pages
+# including Memory, firing (pycmd ?? bridgeCommand)(cmd). On DESKTOP the Memory
+# dialog's webview HAS pycmd, so those buttons render enabled but used to NO-OP
+# because SpeedrunMemory never wired set_bridge_command / _on_bridge_cmd — only
+# SpeedrunHome did. SpeedrunMemory must handle the SAME bridge commands.
+#
+# These tests dispatch at the _on_bridge_cmd/handler level. We bypass the heavy
+# Qt __init__ (which builds an AnkiWebView + calls show(), needing a full
+# QApplication) via __new__, attach the tiny bit of state the handlers touch,
+# and record which action fires per command. No live reviewer/webview needed.
+
+import aqt.speedrun as speedrun_mod  # noqa: E402
+
+# The commands the sidebar can fire that both dialogs must route identically.
+_BRIDGE_COMMANDS = [
+    "startrun",
+    "startrun:import",
+    "startrun:customstudy",
+    "minimock",
+    "speedrun:ai:probe",
+    "speedrun:gen:algebra",
+]
+
+# Each command's expected action-method name on the dialog.
+_EXPECTED_ACTION = {
+    "startrun": "_start_run",
+    "startrun:import": "_import_deck",
+    "startrun:customstudy": "_custom_study",
+    "minimock": "_start_mini_mock",
+    "speedrun:ai:probe": "_ai_probe",
+    "speedrun:gen:algebra": "_ai_generate",
+}
+
+
+def _dispatch_and_record(cls) -> dict[str, str]:
+    """Instantiate ``cls`` WITHOUT its Qt __init__, spy on its action methods,
+    and return {command -> action-method-name that fired} for every bridge cmd."""
+    inst = cls.__new__(cls)  # bypass QDialog/AnkiWebView construction
+    fired: dict[str, str] = {}
+
+    def make_spy(name: str):
+        def spy(*_args, **_kwargs):
+            fired["last"] = name
+
+        return spy
+
+    for action in set(_EXPECTED_ACTION.values()):
+        setattr(inst, action, make_spy(action))
+
+    routed: dict[str, str] = {}
+    for cmd in _BRIDGE_COMMANDS:
+        fired.pop("last", None)
+        inst._on_bridge_cmd(cmd)
+        routed[cmd] = fired.get("last", "")
+    return routed
+
+
+def test_speedrun_home_routes_all_bridge_commands() -> None:
+    routed = _dispatch_and_record(speedrun_mod.SpeedrunHome)
+    assert routed == _EXPECTED_ACTION
+
+
+def test_speedrun_memory_routes_same_bridge_commands_as_home() -> None:
+    # THE parity guard: Memory must dispatch every command to the SAME action as
+    # Home (previously Memory had no _on_bridge_cmd at all -> buttons no-op'd).
+    home = _dispatch_and_record(speedrun_mod.SpeedrunHome)
+    memory = _dispatch_and_record(speedrun_mod.SpeedrunMemory)
+    assert memory == home
+    assert memory == _EXPECTED_ACTION
+
+
+def test_speedrun_memory_has_bridge_handler() -> None:
+    # SpeedrunMemory must expose the bridge handler + the practice actions (not
+    # just inherit a QDialog with no dispatch).
+    for attr in ("_on_bridge_cmd", "_start_run", "_start_mini_mock", "_ai_probe"):
+        assert hasattr(speedrun_mod.SpeedrunMemory, attr), (
+            f"SpeedrunMemory missing {attr}"
+        )
+
+
+def test_no_double_dispatch_alias_reintroduced() -> None:
+    # Desktop makes pycmd === bridgeCommand; the sidebar already fires via
+    # (pycmd ?? bridgeCommand), i.e. ONE channel. Guard that the Qt side wires the
+    # bridge command exactly once per dialog (set_bridge_command called once in
+    # __init__), so a shared-base refactor can't silently double-register it.
+    import inspect
+
+    src = inspect.getsource(speedrun_mod)
+    # Exactly one wiring call total, shared by both dialogs via the base __init__.
+    assert src.count("set_bridge_command(") == 1, (
+        "expected a single shared set_bridge_command wiring, "
+        f"found {src.count('set_bridge_command(')}"
+    )

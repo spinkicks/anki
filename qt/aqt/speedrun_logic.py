@@ -157,6 +157,32 @@ def clamp_mini_mock_size(size: int) -> int:
     return max(MINI_MOCK_SIZE_FLOOR, min(int(size), MINI_MOCK_SIZE_CAP))
 
 
+# The synced collection config key holding the mini-mock size (Decision 13).
+MINI_MOCK_SIZE_KEY = "speedrun:mini_mock_size"
+MINI_MOCK_SIZE_DEFAULT = 10
+
+
+def resolve_mini_mock_size(
+    col: Collection, default: int = MINI_MOCK_SIZE_DEFAULT
+) -> int:
+    """Read ``speedrun:mini_mock_size`` from the collection config and return a
+    clamped, ready-to-use int — never raising.
+
+    ``col.get_config``'s default only fires when the key is ABSENT. A PRESENT but
+    bad value — a synced JSON ``null``, a non-numeric string (``"abc"``), or a
+    decimal string (``"7.5"``) — would make a bare ``int(...)`` raise
+    (TypeError/ValueError) BEFORE the clamp, crashing the mini-mock launch. So we
+    coerce defensively inside a guard, falling back to ``default`` on any failure,
+    and THEN clamp into ``[floor, cap]`` via ``clamp_mini_mock_size``.
+    """
+    raw = col.get_config(MINI_MOCK_SIZE_KEY, default)
+    try:
+        value = int(raw)
+    except (TypeError, ValueError):
+        value = int(default)
+    return clamp_mini_mock_size(value)
+
+
 class MiniMockDecision(NamedTuple):
     # "importNeeded":     Problems subdeck absent, or present but holding zero
     #                     problem cards at all (bank not imported) -> prompt import.

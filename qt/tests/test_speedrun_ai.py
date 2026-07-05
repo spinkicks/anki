@@ -187,6 +187,75 @@ def test_import_skips_malformed_problem() -> None:
         col.close()
 
 
+def test_import_rejects_correct_answer_out_of_range() -> None:
+    # BUG P1-B: a "verified" problem whose correct_answer letter is a VALID A-E
+    # letter but indexes NO rendered choice must be rejected (skipped, not
+    # imported). format_choices renders exactly len(choices) buttons, so with 3
+    # choices only A/B/C exist; correct_answer="D" would import an entry the
+    # learner can NEVER answer correctly (reconcile_mcq grades chosen==key("D")
+    # False forever) — an unwinnable, always-wrong row polluting the OBJECTIVE
+    # speedrun:mcq_attempts Performance signal. Trust nothing: reject it.
+    col = _empty_col()
+    try:
+        _make_problem_model(col)
+        bad = {
+            "stem": "q",
+            "choices": ["1", "2", "3"],  # only A/B/C rendered
+            "correct_answer": "D",  # valid A-E letter, but indexes no choice
+            "worked_solution": "w",
+            "source_citation": "s",
+        }
+        added = speedrun_ai.import_problems(col, "algebra", [bad])
+        assert added == 0
+        assert col.find_notes('note:"Speedrun::Problem"') == []
+    finally:
+        col.close()
+
+
+def test_import_rejects_more_choices_than_renderable_letters() -> None:
+    # BUG P1-B (choice-count cap): format_choices zips options against exactly the
+    # 5 CHOICE_LETTERS, so a 7-choice problem SILENTLY drops the 6th/7th options —
+    # a malformed, misleading MCQ even when its key is an A-E letter. Require
+    # len(choices) <= len(CHOICE_LETTERS): a problem with more choices than can be
+    # rendered is rejected, not half-rendered. (Key "A" here is in A-E and would
+    # index a rendered choice, so the ONLY reason to reject is the choice count —
+    # this isolates the cap from the range check above.)
+    col = _empty_col()
+    try:
+        _make_problem_model(col)
+        bad = {
+            "stem": "q",
+            "choices": ["1", "2", "3", "4", "5", "6", "7"],  # F/G silently dropped
+            "correct_answer": "A",  # in range on its own; rejected for count
+            "worked_solution": "w",
+            "source_citation": "s",
+        }
+        added = speedrun_ai.import_problems(col, "algebra", [bad])
+        assert added == 0
+        assert col.find_notes('note:"Speedrun::Problem"') == []
+    finally:
+        col.close()
+
+
+def test_import_accepts_correct_answer_at_last_rendered_choice() -> None:
+    # Guardrail against an off-by-one: the key at the LAST rendered index is
+    # in range and must still import. Three choices -> C is the last; C is valid.
+    col = _empty_col()
+    try:
+        _make_problem_model(col)
+        good = {
+            "stem": "q3",
+            "choices": ["1", "2", "3"],  # A/B/C rendered
+            "correct_answer": "C",  # last rendered choice — valid
+            "worked_solution": "w",
+            "source_citation": "s",
+        }
+        added = speedrun_ai.import_problems(col, "algebra", [good])
+        assert added == 1
+    finally:
+        col.close()
+
+
 def test_import_missing_model_returns_zero_no_crash() -> None:
     # If the Speedrun::Problem model isn't present (seed never imported), import
     # must be a safe no-op (0 added), never a crash.
