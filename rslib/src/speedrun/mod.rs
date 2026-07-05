@@ -4,6 +4,8 @@
 #[cfg(test)]
 mod ablation;
 #[cfg(test)]
+mod bench;
+#[cfg(test)]
 mod calibration_eval;
 pub(crate) mod exam_profile;
 pub(crate) mod service;
