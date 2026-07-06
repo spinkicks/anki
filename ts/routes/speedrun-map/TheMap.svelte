@@ -7,8 +7,9 @@ every downstream topic whose readiness its weakness caps. Colors encode real
 mastery; abstaining topics stay grey and show no fabricated number.
 -->
 <script lang="ts">
-    import { onMount } from "svelte";
+    import { onDestroy, onMount } from "svelte";
 
+    import { unlockCopy } from "@speedrun/data";
     import SpeedrunShell from "@speedrun/SpeedrunShell.svelte";
 
     import { probeAiAvailability, requestGenerate } from "./ai";
@@ -25,6 +26,32 @@ mastery; abstaining topics stay grey and show no fabricated number.
     let loading = true;
     let error = "";
     let selected: string | null = null;
+
+    // ISSUE #3: fit-to-width. The GRE canvas is a FIXED ~1020px, wider than the
+    // ~990px desktop inner width, so it always scrolled horizontally on desktop.
+    // We measure the wrapper and, at desktop width (>=768px), scale the canvas
+    // down to fit (never up). Below 768px scale stays 1 and the wrapper keeps its
+    // overflow-x:auto phone scroll. The wrapper height tracks the SCALED canvas
+    // height so no dead space is reserved (transforms don't shrink layout boxes).
+    const DESKTOP_MIN = 768;
+    const WRAP_PAD = 8; // .canvas-wrap horizontal padding (each side)
+    let wrapEl: HTMLDivElement | undefined;
+    let scale = 1;
+    let ro: ResizeObserver | undefined;
+
+    function fit(): void {
+        if (!wrapEl || !view) return;
+        const isDesktop =
+            typeof window !== "undefined" &&
+            window.matchMedia(`(min-width:${DESKTOP_MIN}px)`).matches;
+        if (!isDesktop) {
+            // Phone: no scaling — let the wrapper scroll horizontally.
+            scale = 1;
+            return;
+        }
+        const avail = wrapEl.clientWidth - WRAP_PAD * 2;
+        scale = view.width > 0 ? Math.min(1, avail / view.width) : 1;
+    }
 
     // AI "Generate practice" state. OFF-by-default: until the desktop probe says
     // the external AI service is enabled AND reachable, the button is DISABLED
@@ -52,6 +79,17 @@ mastery; abstaining topics stay grey and show no fabricated number.
             aiAvailable = false;
         }
     });
+
+    onDestroy(() => ro?.disconnect());
+
+    // Attach the ResizeObserver once the wrapper is in the DOM (after the map
+    // renders) and refit whenever the wrapper resizes. `fit()` re-runs reactively
+    // when `view`/`wrapEl` change so the initial layout is correct too.
+    $: if (wrapEl && typeof ResizeObserver !== "undefined" && !ro) {
+        ro = new ResizeObserver(() => fit());
+        ro.observe(wrapEl);
+    }
+    $: if (wrapEl && view) fit();
 
     function showToast(msg: string, kind: "ok" | "warn"): void {
         toast = msg;
@@ -82,10 +120,19 @@ mastery; abstaining topics stay grey and show no fabricated number.
             // Keep it honest: only claim success when the import returned N>0.
             if (res.added > 0) {
                 const n = res.added;
-                showToast(
-                    `Added ${n} verified problem${n === 1 ? "" : "s"} to ${node.name}`,
-                    "ok",
-                );
+                if (res.requested > 0 && n < res.requested) {
+                    // ISSUE #4: partial batch — report the shortfall honestly
+                    // instead of implying the full batch landed.
+                    showToast(
+                        `Added ${n} of ${res.requested} verified problems to ${node.name}`,
+                        "warn",
+                    );
+                } else {
+                    showToast(
+                        `Added ${n} verified problem${n === 1 ? "" : "s"} to ${node.name}`,
+                        "ok",
+                    );
+                }
             } else {
                 showToast(
                     "Couldn't produce a verified problem — try again",
@@ -102,6 +149,12 @@ mastery; abstaining topics stay grey and show no fabricated number.
     $: edges = view?.edges ?? [];
     $: blast = selected ? blastRadius(selected, edges) : new Set<string>();
     $: selectedNode = view?.nodes.find((n) => n.id === selected) ?? null;
+    // ISSUE #5: DUAL-gate unlock copy for an abstaining node (cards AND reviews),
+    // computed from the node's own counts via the shared @speedrun/data helper —
+    // the old "answer N more" line reflected only the review gate.
+    $: unlockText = selectedNode
+        ? unlockCopy(selectedNode.cardsWithData, selectedNode.gradedReviews).full
+        : "";
     // An edge is "hot" when it carries the selected weakness downstream.
     $: hotEdge = (from: string, to: string): boolean =>
         selected !== null && (from === selected || blast.has(from)) && blast.has(to);
@@ -138,8 +191,15 @@ mastery; abstaining topics stay grey and show no fabricated number.
     {:else if error}
         <div class="state err">{error}</div>
     {:else if view}
-        <div class="canvas-wrap">
-            <div class="canvas" style={`width:${view.width}px;height:${view.height}px`}>
+        <div
+            class="canvas-wrap"
+            bind:this={wrapEl}
+            style={`height:${view.height * scale + WRAP_PAD * 2}px`}
+        >
+            <div
+                class="canvas"
+                style={`width:${view.width}px;height:${view.height}px;--scale:${scale}`}
+            >
                 <svg class="edges" width={view.width} height={view.height} aria-hidden="true">
                     <defs>
                         <marker
@@ -228,7 +288,7 @@ mastery; abstaining topics stay grey and show no fabricated number.
                     {#if !selectedNode.isContainer && selectedNode.abstained}
                         <div class="unlock">
                             <dt>Status</dt>
-                            <dd>Insufficient data — answer {selectedNode.unlockN} more to unlock a recall estimate.</dd>
+                            <dd>Insufficient data — {unlockText} a recall estimate.</dd>
                         </div>
                     {/if}
                 </dl>
@@ -312,7 +372,8 @@ mastery; abstaining topics stay grey and show no fabricated number.
     .state.err {
         color: #c2603f;
     }
-    /* Graph is wider than a phone — scroll horizontally on small screens. */
+    /* Graph is wider than a phone — scroll horizontally on small screens. On
+       desktop the canvas is scaled to fit (see fit()), so no scroll appears. */
     .canvas-wrap {
         overflow-x: auto;
         overflow-y: hidden;
@@ -320,9 +381,15 @@ mastery; abstaining topics stay grey and show no fabricated number.
         background: radial-gradient(circle at 30% 20%, #10151b, var(--ink));
         border-radius: 8px;
         padding: 8px;
+        box-sizing: border-box;
     }
     .canvas {
         position: relative;
+        /* ISSUE #3: fit-to-width. --scale is 1 on phones (wrapper scrolls) and
+           <=1 on desktop so the fixed-px canvas fits the column with no
+           horizontal scroll. Origin top-left so it shrinks toward the corner. */
+        transform-origin: top left;
+        transform: scale(var(--scale, 1));
     }
     .edges {
         position: absolute;

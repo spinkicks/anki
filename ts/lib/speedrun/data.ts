@@ -31,6 +31,13 @@ export interface ExamProfile {
     topics: ProfileTopic[];
 }
 
+// The Memory abstain gate is DUAL, mirroring the engine
+// (rslib/src/speedrun/service.rs): a topic abstains when
+// `graded_reviews < MIN_REVIEWS || cards_with_data < MIN_CARDS_WITH_DATA`.
+// MIN_CARDS_WITH_DATA is hard-coded (`cards_with_data < 2`) on the Rust side —
+// mirrored here so the unlock copy reflects BOTH gates rather than only reviews.
+export const MIN_CARDS_WITH_DATA = 2;
+
 export interface Row {
     id: string;
     label: string;
@@ -45,6 +52,49 @@ export interface Row {
     gradedReviews: number;
     abstained: boolean;
     unlockN: number; // max(0, min_reviews - graded_reviews)
+    // DUAL-gate unlock fields — always populated by loadRows(); optional on the
+    // interface so existing plain-object Row fixtures (tests) stay valid without
+    // being edited. Consumers coalesce a missing value to "".
+    cardsN?: number; // max(0, MIN_CARDS_WITH_DATA - cards_with_data)
+    // Human unlock copy reflecting BOTH gates (cards AND reviews). `unlockFull`
+    // is the wide-screen sentence; `unlockCompact` the narrow-screen chip.
+    unlockFull?: string;
+    unlockCompact?: string;
+}
+
+// Actionable unlock copy for an abstaining Memory topic. Reflects the DUAL gate:
+// `cardsN` more cards need FSRS data AND `reviewsN` more graded reviews are
+// needed. Returns pre-pluralized `full` (wide) and `compact` (narrow) strings so
+// every surface (Memory table, Map detail, Home) speaks the SAME honest copy.
+// Pure + exported for unit tests.
+export function unlockCopy(
+    cardsWithData: number,
+    gradedReviews: number,
+    minReviews = 20,
+    minCards = MIN_CARDS_WITH_DATA,
+): { cardsN: number; reviewsN: number; full: string; compact: string } {
+    const cardsN = Math.max(0, minCards - cardsWithData);
+    const reviewsN = Math.max(0, minReviews - gradedReviews);
+    const cardWord = cardsN === 1 ? "card" : "cards";
+    const reviewWord = reviewsN === 1 ? "time" : "times";
+    let full: string;
+    let compact: string;
+    if (cardsN > 0 && reviewsN > 0) {
+        full = `Study ${cardsN} more ${cardWord} and review ${reviewsN} more ${reviewWord} to unlock`;
+        compact = `${cardsN} ${cardWord} · ${reviewsN} reviews to unlock`;
+    } else if (cardsN > 0) {
+        full = `Study ${cardsN} more ${cardWord} to unlock`;
+        compact = `${cardsN} ${cardWord} to unlock`;
+    } else if (reviewsN > 0) {
+        full = `Review ${reviewsN} more ${reviewWord} to unlock`;
+        compact = `${reviewsN} reviews to unlock`;
+    } else {
+        // Both gates already met — no outstanding requirement (the row should
+        // not be abstained in this case). Keep copy honest, not "0 more".
+        full = "Unlocking…";
+        compact = "Unlocking…";
+    }
+    return { cardsN, reviewsN, full, compact };
 }
 
 export async function loadProfile(examId = "gre_math"): Promise<ExamProfile | null> {
@@ -58,6 +108,7 @@ export async function loadProfile(examId = "gre_math"): Promise<ExamProfile | nu
 export async function loadRows(
     profile: ExamProfile,
     minReviews = 20,
+    minCards = MIN_CARDS_WITH_DATA,
 ): Promise<Row[]> {
     const leafIds = profile.topics.filter((t) => t.ets_weight > 0).map((t) => t.id);
     const mastery = await getTopicMastery({
@@ -69,6 +120,10 @@ export async function loadRows(
     return profile.topics.map((t) => {
         const m = byTopic.get(t.id);
         const graded = m ? Number(m.gradedReviews) : 0;
+        const cards = m ? Number(m.cardsWithData) : 0;
+        // DUAL-gate unlock copy (cards AND reviews) — single source of truth so
+        // Memory / Map / Home all state the same honest remaining requirement.
+        const copy = unlockCopy(cards, graded, minReviews, minCards);
         return {
             id: t.id,
             label: t.name,
@@ -79,10 +134,13 @@ export async function loadRows(
             lower: m ? m.masteredLower : 0,
             upper: m ? m.masteredUpper : 1,
             masteredCount: m ? Number(m.masteredCount) : 0,
-            cardsWithData: m ? Number(m.cardsWithData) : 0,
+            cardsWithData: cards,
             gradedReviews: graded,
             abstained: m ? m.abstained : true,
-            unlockN: Math.max(0, minReviews - graded),
+            unlockN: copy.reviewsN,
+            cardsN: copy.cardsN,
+            unlockFull: copy.full,
+            unlockCompact: copy.compact,
         };
     });
 }

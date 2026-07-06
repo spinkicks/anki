@@ -83,6 +83,7 @@ describe("requestGenerate", () => {
                     win.speedrunGenStatus?.({
                         topic: "calc::limits",
                         added: 3,
+                        requested: 5,
                         error: "",
                     }),
                 0,
@@ -90,7 +91,43 @@ describe("requestGenerate", () => {
         };
         const res = await requestGenerate("calc::limits", 1000);
         expect(pycmd).toHaveBeenCalledWith("speedrun:gen:calc::limits");
-        expect(res).toEqual({ topic: "calc::limits", added: 3, error: "" });
+        expect(res).toEqual({
+            topic: "calc::limits",
+            added: 3,
+            requested: 5,
+            error: "",
+        });
+    });
+
+    test("carries a partial (added < requested) shortfall from Qt", async () => {
+        // ISSUE #4: Lane 3 exposes produced/requested; a partial batch must be
+        // reportable honestly, not folded into a plain success.
+        win.pycmd = () => {
+            setTimeout(
+                () =>
+                    win.speedrunGenStatus?.({
+                        topic: "calc::limits",
+                        added: 2,
+                        requested: 5,
+                        error: "",
+                    }),
+                0,
+            );
+        };
+        const res = await requestGenerate("calc::limits", 1000);
+        expect(res.added).toBe(2);
+        expect(res.requested).toBe(5);
+    });
+
+    test("defaults requested to 5 when Qt omits it", async () => {
+        win.pycmd = () => {
+            setTimeout(
+                () => win.speedrunGenStatus?.({ topic: "calc::limits", added: 5 }),
+                0,
+            );
+        };
+        const res = await requestGenerate("calc::limits", 1000);
+        expect(res.requested).toBe(5);
     });
 
     test("no bridge => honest zero-added result (never a false success)", async () => {

@@ -46,6 +46,12 @@ License: GNU AGPL, version 3 or later; http://www.gnu.org/licenses/agpl.html
             <small>/{memoryVerified.total} timed</small>
         </div>
         <div class="meter"><i style={`width:${memoryPct}%`}></i></div>
+        <!-- ISSUE #5: on a fresh deck (no topic has data yet) spell out the DUAL
+             unlock gate so "0 timed" doesn't read as broken — a topic unlocks
+             only after BOTH gates (2 cards with data AND 20 graded reviews). -->
+        {#if memoryVerified.total === 0}
+            <div class="hint">unlock after 20 graded reviews on 2+ cards per topic</div>
+        {/if}
     </div>
     <div class="stat">
         <!-- Performance = demonstrated problem accuracy (ETS-weighted), only once
