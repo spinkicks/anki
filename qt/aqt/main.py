@@ -542,7 +542,11 @@ class AnkiQt(QMainWindow):
                 # Reversible via speedrunHomeAutoOpenEnabled; Tools entry is the
                 # fallback.
                 if self.pm.profile.get("speedrunHomeAutoOpenEnabled", True):
-                    aqt.dialogs.open("SpeedrunHome", self)
+                    from aqt.speedrun import SpeedrunWindow
+
+                    aqt.dialogs.open(
+                        "Speedrun", self, route=SpeedrunWindow.HOME_PAGE
+                    )
 
         last_day_cutoff = self.col.sched.day_cutoff
 
@@ -1331,10 +1335,17 @@ title="{}" {}>{}</button>""".format(
         aqt.dialogs.open("Preferences", self)
 
     def onSpeedrunMemory(self) -> None:
-        aqt.dialogs.open("SpeedrunMemory", self)
+        # ONE Speedrun window: open (or reuse+navigate) the single "Speedrun"
+        # dialog on the Memory page. If Home is already open this reuses that
+        # window and navigates its webview — it does NOT spawn a second window.
+        from aqt.speedrun import SpeedrunWindow
+
+        aqt.dialogs.open("Speedrun", self, route=SpeedrunWindow.MEMORY_PAGE)
 
     def onSpeedrunHome(self) -> None:
-        aqt.dialogs.open("SpeedrunHome", self)
+        from aqt.speedrun import SpeedrunWindow
+
+        aqt.dialogs.open("Speedrun", self, route=SpeedrunWindow.HOME_PAGE)
 
     def _setup_speedrun_ai_toggle(self, m: Any) -> None:
         # Checkable Tools-menu item that enables AI generation for THIS session

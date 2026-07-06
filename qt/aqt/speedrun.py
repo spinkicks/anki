@@ -14,32 +14,42 @@ from aqt.utils import disable_help_button, restoreGeom, saveGeom
 from aqt.webview import AnkiWebView, AnkiWebViewKind
 
 
-class _SpeedrunBridgeDialog(QDialog):
-    """Shared base for the Speedrun webview dialogs (Home and Memory).
+class SpeedrunWindow(QDialog):
+    """The single Speedrun window (Home / The Map / Memory in ONE webview).
 
-    Both host a SvelteKit page in the SAME persistent sidebar shell, which shows
-    the Practice actions (Start Run / Mini-mock) and the AI "Generate practice"
-    button on EVERY page and fires them via ``(pycmd ?? bridgeCommand)(cmd)``. On
-    desktop the webview always has ``pycmd`` (Qt injects it globally), so those
-    buttons render ENABLED on Memory too — they must therefore ACT, not no-op.
+    Speedrun used to be TWO top-level QDialog windows — SpeedrunHome and
+    SpeedrunMemory — registered under two ``aqt.dialogs`` keys, so Home and Memory
+    could both be open at once (up to three windows: main + Home + Memory). The
+    Svelte side is already ONE SPA (the persistent SpeedrunShell sidebar links
+    Home / Map / Memory), so the split was pure desktop-window duplication. This
+    class collapses them into ONE window under a SINGLE registry key ("Speedrun")
+    with one webview + one geometry. Navigating between Home / Map / Memory
+    (whether via the in-page sidebar or via the Tools menu) reuses THIS window and
+    just loads the target SvelteKit page — never a second window.
 
-    So the bridge-command wiring (``set_bridge_command``) + ``_on_bridge_cmd``
-    dispatch + all the action methods live here, shared by both subclasses. Each
-    subclass supplies only its own registry name / geometry key, window title,
-    SvelteKit page and default size (via class attributes below). Keeping the
-    wiring in ONE place also guarantees the desktop pycmd===bridgeCommand alias
-    can't be turned into a double-dispatch: there is a single set_bridge_command
-    call, inherited by both dialogs."""
+    It hosts a SvelteKit page in the persistent sidebar shell, which shows the
+    Practice actions (Start Run / Mini-mock) and the AI "Generate practice" button
+    on EVERY page and fires them via ``(pycmd ?? bridgeCommand)(cmd)``. On desktop
+    the webview always has ``pycmd`` (Qt injects it globally), so those buttons act
+    on every page. There is a SINGLE ``set_bridge_command`` wiring, so the desktop
+    pycmd===bridgeCommand alias can't become a double-dispatch."""
 
-    # Subclasses override these four. ``DIALOG_NAME`` is BOTH the aqt.dialogs
-    # registry key and the geometry-save key, so it must match the name the class
-    # is registered under in aqt/__init__.py (which equals the class name).
-    DIALOG_NAME = ""
-    WINDOW_TITLE = ""
-    SVELTE_PAGE = ""
+    # ``DIALOG_NAME`` is BOTH the aqt.dialogs registry key and the geometry-save
+    # key. It intentionally does NOT equal the class name (which the old two-class
+    # design relied on for markClosed): the single key is "Speedrun".
+    DIALOG_NAME = "Speedrun"
+    WINDOW_TITLE = "Speedrun"
     DEFAULT_SIZE = (1000, 820)
 
-    def __init__(self, mw: aqt.main.AnkiQt) -> None:
+    # The SvelteKit pages the one window can show. A "route" passed to open/reopen
+    # is one of these page names; navigation loads it into the same webview.
+    HOME_PAGE = "speedrun-home"
+    MAP_PAGE = "speedrun-map"
+    MEMORY_PAGE = "speedrun-memory"
+
+    def __init__(
+        self, mw: aqt.main.AnkiQt, route: str = HOME_PAGE
+    ) -> None:
         QDialog.__init__(self, mw, Qt.WindowType.Window)
         mw.garbage_collect_on_dialog_finish(self)
         self.mw = mw
@@ -53,8 +63,24 @@ class _SpeedrunBridgeDialog(QDialog):
         layout.addWidget(self.web)
         self.setLayout(layout)
         restoreGeom(self, self.name, default_size=self.DEFAULT_SIZE)
-        self.web.load_sveltekit_page(self.SVELTE_PAGE)
+        self._current_page = route or self.HOME_PAGE
+        self.web.load_sveltekit_page(self._current_page)
         self.show()
+
+    def reopen(self, _mw: aqt.main.AnkiQt, route: str = HOME_PAGE) -> None:
+        """Second+ ``dialogs.open("Speedrun", ...)`` call: the DialogManager has
+        already raised/activated this one window; here we ONLY navigate its webview
+        — and only when the requested route differs from the page already shown
+        (so Tools->Home while Home is open is a pure raise, while Tools->Memory
+        reuses this window and navigates). Never spawns a second window."""
+        self._navigate(route or self.HOME_PAGE)
+
+    def _navigate(self, route: str) -> None:
+        """Load ``route`` into THIS webview, but only if it isn't already shown."""
+        if route == self._current_page:
+            return
+        self._current_page = route
+        self.web.load_sveltekit_page(route)
 
     # The exam deck the run studies. Grounded fact: this is the seed deck name.
     # Single source of truth lives in speedrun_logic (shared with the installer
@@ -73,7 +99,10 @@ class _SpeedrunBridgeDialog(QDialog):
         elif cmd == "minimock":
             self._start_mini_mock()
         elif cmd == "open:memory":
-            aqt.dialogs.open("SpeedrunMemory", self.mw)
+            # Legacy 2nd-window spawn removed: navigate the SAME webview to the
+            # Memory page (one window). The in-page SPA sidebar links already do
+            # client-side nav; this handler covers any remaining bridge callers.
+            self._navigate(self.MEMORY_PAGE)
         # AI "Generate practice" (The Map lives in this same webview via the
         # SvelteKit /speedrun-map link, so it shares this bridge). Both handlers
         # are inert unless the external AI service is enabled+reachable, so the
@@ -256,29 +285,11 @@ class _SpeedrunBridgeDialog(QDialog):
     def reject(self) -> None:
         self.web.cleanup()
         saveGeom(self, self.name)
-        # The aqt.dialogs registry key equals the concrete class name
-        # (SpeedrunHome / SpeedrunMemory), so mark THIS dialog closed.
-        aqt.dialogs.markClosed(type(self).__name__)
+        # Single registry key: mark the one "Speedrun" dialog closed (self.name
+        # == DIALOG_NAME == the aqt.dialogs key, no longer the class name).
+        aqt.dialogs.markClosed(self.name)
         QDialog.reject(self)
 
     def closeWithCallback(self, callback: Callable[[], None]) -> None:
         self.reject()
         callback()
-
-
-class SpeedrunHome(_SpeedrunBridgeDialog):
-    DIALOG_NAME = "speedrunHome"
-    WINDOW_TITLE = "Speedrun: Home"
-    SVELTE_PAGE = "speedrun-home"
-    DEFAULT_SIZE = (1000, 820)
-
-
-class SpeedrunMemory(_SpeedrunBridgeDialog):
-    # Same bridge handling as Home (inherited): the merged sidebar shows the
-    # Practice/Generate actions on the Memory page too, so they must ACT here —
-    # previously SpeedrunMemory never wired set_bridge_command and the buttons
-    # no-op'd. Only the page/title/geometry differ.
-    DIALOG_NAME = "speedrunMemory"
-    WINDOW_TITLE = "Speedrun: Memory"
-    SVELTE_PAGE = "speedrun-memory"
-    DEFAULT_SIZE = (900, 800)
