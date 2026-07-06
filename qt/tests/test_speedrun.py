@@ -1333,3 +1333,184 @@ def test_l2_timer_format_mmss_counts_up_honestly() -> None:
     assert speedrun_timer.format_mmss(3599) == "59:59"
     assert speedrun_timer.format_mmss(3600) == "60:00"  # not capped at 59
     assert speedrun_timer.format_mmss(-10) == "00:00"  # clamp, no negative
+
+
+# ---- L2 phase-2: single-window (minimize the base main window on open;
+#      GUARANTEED restore on every exit path) ----
+#
+# Phase-1 collapsed Speedrun into ONE window. Phase-2 makes it feel like a single
+# cohesive app: while the Speedrun window is open the base Anki main window is
+# MINIMIZED (never hidden — it always keeps a taskbar entry, so the app can never
+# be stranded with no visible/taskbar window) and is RESTORED (showNormal + raise)
+# whenever Speedrun closes OR routes into the reviewer (which runs in the base
+# window, so it MUST be visible there). Reversible via the ``speedrunSingleWindow``
+# profile flag (default ON), mirroring ``speedrunSeedImportEnabled``. All of the
+# minimize/restore LOGIC lives in tiny Qt-free helpers so it is unit-tested here
+# without a QApplication (via __new__ + a recording fake main window), following
+# the existing Part-B test style.
+
+from types import SimpleNamespace as _NS  # noqa: E402
+
+import aqt.speedrun_logic as speedrun_logic  # noqa: E402
+
+
+class _RecordingMw:
+    """Minimal stand-in for AnkiQt that records window-state calls in order.
+
+    ``col.decks.select`` records onto the SAME list so a test can assert the
+    relative order of the deck-select, close, restore and moveToState steps.
+    """
+
+    def __init__(self) -> None:
+        self.calls: list = []
+        self.col = _NS(
+            decks=_NS(select=lambda did: self.calls.append(("select", did)))
+        )
+
+    def showMinimized(self) -> None:
+        self.calls.append("showMinimized")
+
+    def showNormal(self) -> None:
+        self.calls.append("showNormal")
+
+    def raise_(self) -> None:
+        self.calls.append("raise_")
+
+    def activateWindow(self) -> None:
+        self.calls.append("activateWindow")
+
+    def moveToState(self, state: str) -> None:
+        self.calls.append(("moveToState", state))
+
+
+def _phase2_window(single_window: bool = True, did_minimize: bool = False):
+    """A SpeedrunWindow with the phase-2 state attributes set, bypassing Qt
+    __init__ (no QApplication/webview), with a recording fake main window."""
+    win = speedrun_mod.SpeedrunWindow.__new__(speedrun_mod.SpeedrunWindow)
+    win.mw = _RecordingMw()
+    win._single_window = single_window
+    win._did_minimize_base = did_minimize
+    return win
+
+
+def test_phase2_single_window_flag_defaults_on_and_is_reversible() -> None:
+    # The reversible flag mirrors speedrunSeedImportEnabled: default ON when the
+    # key is absent, honoured when present, and any failure to read the profile
+    # disables it (safe default = classic phase-1, base window never touched).
+    read = speedrun_mod._speedrun_single_window_enabled
+    assert read(_NS(pm=_NS(profile={}))) is True  # absent key -> default ON
+    assert read(_NS(pm=_NS(profile={"speedrunSingleWindow": True}))) is True
+    assert read(_NS(pm=_NS(profile={"speedrunSingleWindow": False}))) is False
+    assert read(_NS()) is False  # broken/absent profile -> safe default OFF
+
+
+def test_phase2_minimize_base_called_once_when_flag_on() -> None:
+    # On open (flag ON) the base window is minimized exactly once. showMinimized,
+    # never hide(): the base window keeps its taskbar entry.
+    win = _phase2_window(single_window=True, did_minimize=False)
+    win._minimize_base_window()
+    assert win.mw.calls == ["showMinimized"]
+    assert win._did_minimize_base is True
+    # Idempotent: raising/re-showing the window does not repeatedly yank the base
+    # window down.
+    win._minimize_base_window()
+    assert win.mw.calls == ["showMinimized"]
+
+
+def test_phase2_minimize_base_noop_when_flag_off() -> None:
+    # Flag OFF => classic phase-1: the base window is never touched, so nothing to
+    # restore later either.
+    win = _phase2_window(single_window=False)
+    win._minimize_base_window()
+    assert win.mw.calls == []
+    assert win._did_minimize_base is False
+
+
+def test_phase2_uses_showminimized_never_hide() -> None:
+    # Anti-stranding invariant: the base window is only ever MINIMIZED, never
+    # hidden — a minimized window still owns a taskbar entry the user can click.
+    import inspect
+
+    src = inspect.getsource(speedrun_mod.SpeedrunWindow._minimize_base_window)
+    assert "showMinimized" in src
+    assert ".hide(" not in src, "must NEVER hide() the base window (would strand)"
+
+
+def test_phase2_restore_base_called_when_minimized() -> None:
+    # Guaranteed restore: showNormal + raise + activate so the base window is
+    # visible again (e.g. for the reviewer, which runs in it).
+    win = _phase2_window(did_minimize=True)
+    win._restore_base_window()
+    assert win.mw.calls == ["showNormal", "raise_", "activateWindow"]
+
+
+def test_phase2_restore_base_noop_when_not_minimized() -> None:
+    # We only ever un-minimize a window WE minimized (so a user who minimized the
+    # base window themselves, or the flag-off case, is left untouched).
+    win = _phase2_window(did_minimize=False)
+    win._restore_base_window()
+    assert win.mw.calls == []
+
+
+def test_phase2_start_run_restores_base_before_review(monkeypatch) -> None:
+    # Start Run "ready" launches the reviewer in the BASE window, so the base
+    # window MUST be restored BEFORE moveToState("review") — otherwise the
+    # reviewer would be rendered into a still-minimized window.
+    win = _phase2_window(did_minimize=True)
+    win.close = lambda: win.mw.calls.append("close")
+    monkeypatch.setattr(
+        speedrun_logic,
+        "decide_start_run",
+        lambda col, deck: _NS(status="ready", deck_id=DeckId(123)),
+    )
+    win._start_run()
+    calls = win.mw.calls
+    assert ("select", DeckId(123)) in calls
+    assert "close" in calls
+    assert "showNormal" in calls
+    assert ("moveToState", "review") in calls
+    assert calls.index("showNormal") < calls.index(("moveToState", "review"))
+
+
+def test_phase2_mini_mock_restores_base_before_review(monkeypatch) -> None:
+    # The mini-mock "ready" path likewise enters the reviewer in the base window;
+    # restore must precede moveToState there too.
+    win = _phase2_window(did_minimize=True)
+    win.close = lambda: win.mw.calls.append("close")
+    monkeypatch.setattr(speedrun_logic, "resolve_mini_mock_size", lambda col: 5)
+    monkeypatch.setattr(
+        speedrun_logic,
+        "decide_mini_mock",
+        lambda col, deck: _NS(status="ready", deck_id=DeckId(7)),
+    )
+    monkeypatch.setattr(
+        speedrun_logic,
+        "build_mini_mock_deck",
+        lambda col, deck, size: DeckId(999),
+    )
+    win._start_mini_mock()
+    calls = win.mw.calls
+    assert ("select", DeckId(999)) in calls
+    assert "showNormal" in calls
+    assert ("moveToState", "review") in calls
+    assert calls.index("showNormal") < calls.index(("moveToState", "review"))
+
+
+def test_phase2_reject_restores_base_window(monkeypatch) -> None:
+    # Closing the Speedrun window (user reject()) restores the base window FIRST,
+    # before any teardown, so a failure mid-teardown can never leave the app with
+    # the base window minimized and no Speedrun window.
+    win = _phase2_window(did_minimize=True)
+    win.name = speedrun_mod.SpeedrunWindow.DIALOG_NAME
+    win.web = _NS(cleanup=lambda: win.mw.calls.append("cleanup"))
+    monkeypatch.setattr(speedrun_mod, "saveGeom", lambda *a, **k: None)
+    monkeypatch.setattr(speedrun_mod.aqt.dialogs, "markClosed", lambda *a, **k: None)
+    # ``QDialog.reject(self)`` on a bare __new__ instance touches the
+    # uninitialised C++ object and raises; restore + cleanup already ran BEFORE
+    # it (restore is the FIRST statement), which is exactly the guarantee we want.
+    try:
+        win.reject()
+    except Exception:
+        pass
+    assert win.mw.calls[:3] == ["showNormal", "raise_", "activateWindow"]
+    assert win.mw.calls.index("showNormal") < win.mw.calls.index("cleanup")

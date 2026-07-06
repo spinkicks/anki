@@ -14,6 +14,19 @@ from aqt.utils import disable_help_button, restoreGeom, saveGeom
 from aqt.webview import AnkiWebView, AnkiWebViewKind
 
 
+def _speedrun_single_window_enabled(mw: aqt.main.AnkiQt) -> bool:
+    """Read the reversible phase-2 one-window flag (default ON).
+
+    Mirrors the existing Speedrun config-flag pattern (e.g. how
+    ``speedrunSeedImportEnabled`` is read in main.py). Any failure to read the
+    profile disables the behaviour, so the safe default on error is the classic
+    phase-1 window (parented to ``mw``, base window never touched)."""
+    try:
+        return bool(mw.pm.profile.get("speedrunSingleWindow", True))
+    except Exception:
+        return False
+
+
 class SpeedrunWindow(QDialog):
     """The single Speedrun window (Home / The Map / Memory in ONE webview).
 
@@ -50,9 +63,24 @@ class SpeedrunWindow(QDialog):
     def __init__(
         self, mw: aqt.main.AnkiQt, route: str = HOME_PAGE
     ) -> None:
-        QDialog.__init__(self, mw, Qt.WindowType.Window)
+        # Phase-2 one-window UX (reversible via ``speedrunSingleWindow``, default
+        # ON): when enabled, do NOT parent this window to ``mw``. Minimizing
+        # ``mw`` (to hide the base app so Speedrun feels like a single cohesive
+        # app) must NOT cascade-minimize THIS window — on Windows a parented
+        # top-level shares its parent's taskbar entry and minimizes WITH it — and
+        # an unparented top-level keeps its OWN taskbar entry, so the app can never
+        # be stranded with no visible/taskbar window. ``self.mw`` still drives ALL
+        # logic. Flag OFF => classic phase-1 (parented to mw; base never touched).
+        single_window = _speedrun_single_window_enabled(mw)
+        QDialog.__init__(
+            self, None if single_window else mw, Qt.WindowType.Window
+        )
         mw.garbage_collect_on_dialog_finish(self)
         self.mw = mw
+        self._single_window = single_window
+        # True once we have asked the base window to minimize; gates the
+        # guaranteed restore so we only ever un-minimize a window WE minimized.
+        self._did_minimize_base = False
         self.name = self.DIALOG_NAME
         self.setWindowTitle(self.WINDOW_TITLE)
         disable_help_button(self)
@@ -66,6 +94,11 @@ class SpeedrunWindow(QDialog):
         self._current_page = route or self.HOME_PAGE
         self.web.load_sveltekit_page(self._current_page)
         self.show()
+        # Minimize the base window only AFTER this window is shown — never earlier
+        # in construction in a way that could race the post-sync startup dialog
+        # (the startup auto-open already fires post-sync). Guarded + once-only so
+        # it can never crash launch or leave the app with no visible window.
+        self._minimize_base_window()
 
     def reopen(self, _mw: aqt.main.AnkiQt, route: str = HOME_PAGE) -> None:
         """Second+ ``dialogs.open("Speedrun", ...)`` call: the DialogManager has
@@ -81,6 +114,45 @@ class SpeedrunWindow(QDialog):
             return
         self._current_page = route
         self.web.load_sveltekit_page(route)
+
+    # ---- Phase-2 single-window: minimize/restore the base main window --------
+
+    def _minimize_base_window(self) -> None:
+        """Minimize the base main window so the open Speedrun window feels like a
+        single cohesive app.
+
+        Uses ``showMinimized()`` — NEVER ``hide()`` — so the base window always
+        keeps a taskbar entry and the app can never be stranded with no
+        visible/taskbar window. Runs at most once (so raising/re-showing this
+        window later does not repeatedly yank the base window down) and only when
+        the reversible single-window flag is on. Fully guarded: a failure to
+        minimize can never crash launch."""
+        if self._did_minimize_base or not self._single_window:
+            return
+        # Mark BEFORE the call so that even if it raises, the paired restore in
+        # every exit path still runs (never leave the base window minimized).
+        self._did_minimize_base = True
+        try:
+            self.mw.showMinimized()
+        except Exception:
+            pass
+
+    def _restore_base_window(self) -> None:
+        """GUARANTEED restore of the base main window, called on EVERY Speedrun
+        exit path (user close/reject and route-to-reviewer).
+
+        Only un-minimizes a window we actually minimized, and is fully guarded so
+        it can never raise into an exit/launch path or leave the app with no
+        visible window. ``showNormal`` + ``raise_`` + ``activateWindow`` so the
+        base window (which hosts the reviewer) is visible and focused again."""
+        if not self._did_minimize_base:
+            return
+        try:
+            self.mw.showNormal()
+            self.mw.raise_()
+            self.mw.activateWindow()
+        except Exception:
+            pass
 
     # The exam deck the run studies. Grounded fact: this is the seed deck name.
     # Single source of truth lives in speedrun_logic (shared with the installer
@@ -203,6 +275,9 @@ class SpeedrunWindow(QDialog):
             assert decision.deck_id is not None
             self.mw.col.decks.select(decision.deck_id)
             self.close()
+            # The reviewer runs in the BASE window, so it MUST be visible there —
+            # restore it (guaranteed) right before entering the review state.
+            self._restore_base_window()
             self.mw.moveToState("review")
 
     def _start_mini_mock(self) -> None:
@@ -259,6 +334,8 @@ class SpeedrunWindow(QDialog):
                 return
             self.mw.col.decks.select(did)
             self.close()
+            # Reviewer runs in the BASE window — restore it before entering review.
+            self._restore_base_window()
             self.mw.moveToState("review")
 
     def _import_deck(self) -> None:
@@ -283,6 +360,10 @@ class SpeedrunWindow(QDialog):
         CustomStudy.fetch_data_and_show(self.mw)
 
     def reject(self) -> None:
+        # Guaranteed restore FIRST: whatever happens during teardown below, the
+        # base window must never be left minimized because Speedrun closed (no-op
+        # unless we actually minimized it).
+        self._restore_base_window()
         self.web.cleanup()
         saveGeom(self, self.name)
         # Single registry key: mark the one "Speedrun" dialog closed (self.name
