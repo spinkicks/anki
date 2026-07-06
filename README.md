@@ -25,6 +25,15 @@ points-at-stake new-card reorder plus a due-card weakness×topic interleave — 
 Map / Memory** navigation and **Start Run / Mini-mock** practice actions, and owns the design tokens in
 one place so every page stays consistent. It's the same Svelte surface on desktop and Android.
 
+### A cohesive, honest study flow
+Desktop runs as a **single Speedrun window** — Home / The Map / Memory share one webview, and the base
+Anki window steps aside while you're in Speedrun (reversible via the `speedrunSingleWindow` profile flag).
+Problem cards enforce an honest sequence: **place a Sure / Think / Guess confidence bet first** (it locks
+in), then answer the multiple-choice — and your pick **persists through *Show Answer*** instead of
+resetting. **Mini-mocks show a live count-up timer** (it's a timed set), and AI practice generation
+**loops until it has 5 source-verified problems**, importing only what passes (or honestly reporting the
+shortfall).
+
 ### Three honest scores
 - **Memory** — per-topic mastery from FSRS retrievability with a **Wilson 95% interval**; abstains below the data threshold.
 - **Performance** — **objectively key-checked**: multiple-choice answers are graded **in the engine** against the stored key (never client-trusted or self-rated), read from a synced attempts log, alongside a memory→performance transfer gap.
