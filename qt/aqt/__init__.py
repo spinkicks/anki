@@ -114,9 +114,14 @@ from aqt import addcards, addons, browser, editcurrent, filtered_deck  # isort:s
 from aqt import stats, about, preferences, mediasync  # isort:skip
 from aqt import speedrun  # isort:skip
 from aqt import speedrun_capture  # isort:skip
+from aqt import speedrun_timer  # isort:skip
 
 # Wire the desktop confidence-capture hooks once at import (no reviewer.py edits).
 speedrun_capture.register()
+# Wire the mini-mock session-timer overlay hooks once at import (no reviewer.py
+# edits either): shows a live count-up mm:ss only while a "Speedrun Mini-Mock"
+# deck is being reviewed.
+speedrun_timer.register()
 
 
 class DialogManager:
@@ -131,8 +136,9 @@ class DialogManager:
         "About": [about.show, None],
         "Preferences": [preferences.Preferences, None],
         "sync_log": [mediasync.MediaSyncDialog, None],
-        "SpeedrunMemory": [speedrun.SpeedrunMemory, None],
-        "SpeedrunHome": [speedrun.SpeedrunHome, None],
+        # ONE Speedrun window (Home / Map / Memory in a single webview), so Home
+        # and Memory can never open as two separate windows.
+        "Speedrun": [speedrun.SpeedrunWindow, None],
     }
 
     def open(self, name: str, *args: Any, **kwargs: Any) -> Any:

@@ -1027,39 +1027,142 @@ def _dispatch_and_record(cls) -> dict[str, str]:
     return routed
 
 
-def test_speedrun_home_routes_all_bridge_commands() -> None:
-    routed = _dispatch_and_record(speedrun_mod.SpeedrunHome)
+def test_speedrun_window_routes_all_bridge_commands() -> None:
+    # L2 issue #1: the two dialogs (SpeedrunHome/SpeedrunMemory) were collapsed
+    # into ONE SpeedrunWindow. The single window must still route every sidebar
+    # command to its action (parity is now intrinsic — one class, one dispatch).
+    routed = _dispatch_and_record(speedrun_mod.SpeedrunWindow)
     assert routed == _EXPECTED_ACTION
 
 
-def test_speedrun_memory_routes_same_bridge_commands_as_home() -> None:
-    # THE parity guard: Memory must dispatch every command to the SAME action as
-    # Home (previously Memory had no _on_bridge_cmd at all -> buttons no-op'd).
-    home = _dispatch_and_record(speedrun_mod.SpeedrunHome)
-    memory = _dispatch_and_record(speedrun_mod.SpeedrunMemory)
-    assert memory == home
-    assert memory == _EXPECTED_ACTION
-
-
-def test_speedrun_memory_has_bridge_handler() -> None:
-    # SpeedrunMemory must expose the bridge handler + the practice actions (not
-    # just inherit a QDialog with no dispatch).
+def test_speedrun_window_has_bridge_handler() -> None:
+    # The one window must expose the bridge handler + the practice actions (not
+    # just be a bare QDialog with no dispatch).
     for attr in ("_on_bridge_cmd", "_start_run", "_start_mini_mock", "_ai_probe"):
-        assert hasattr(speedrun_mod.SpeedrunMemory, attr), (
-            f"SpeedrunMemory missing {attr}"
+        assert hasattr(speedrun_mod.SpeedrunWindow, attr), (
+            f"SpeedrunWindow missing {attr}"
         )
 
 
 def test_no_double_dispatch_alias_reintroduced() -> None:
     # Desktop makes pycmd === bridgeCommand; the sidebar already fires via
     # (pycmd ?? bridgeCommand), i.e. ONE channel. Guard that the Qt side wires the
-    # bridge command exactly once per dialog (set_bridge_command called once in
-    # __init__), so a shared-base refactor can't silently double-register it.
+    # bridge command exactly once, so a refactor can't silently double-register it.
     import inspect
 
     src = inspect.getsource(speedrun_mod)
-    # Exactly one wiring call total, shared by both dialogs via the base __init__.
     assert src.count("set_bridge_command(") == 1, (
-        "expected a single shared set_bridge_command wiring, "
+        "expected a single set_bridge_command wiring, "
         f"found {src.count('set_bridge_command(')}"
     )
+
+
+# ---- L2 issue #1: ONE Speedrun window (single registry key + in-webview nav) ----
+#
+# Speedrun used to be TWO top-level QDialog windows (SpeedrunHome + SpeedrunMemory)
+# registered as TWO DialogManager keys, so Home and Memory could BOTH be open at
+# once (up to 3 windows). They are collapsed into ONE SpeedrunWindow under a SINGLE
+# registry key "Speedrun"; Tools->Memory while Home is open must REUSE that one
+# window and navigate its webview, and the legacy open:memory 2nd-window spawn is
+# replaced by in-webview navigation. (The live on-screen window count is David's
+# manual gate; these tests pin the registry + navigation logic without a
+# QApplication.)
+
+
+def test_l2_single_speedrun_registry_key() -> None:
+    # Exactly ONE Speedrun key, "Speedrun", mapped to SpeedrunWindow; the two old
+    # keys must be gone so a second window can never be spawned.
+    import aqt
+
+    dialogs = aqt.DialogManager._dialogs
+    assert "Speedrun" in dialogs, "the single 'Speedrun' registry key must exist"
+    assert dialogs["Speedrun"][0] is speedrun_mod.SpeedrunWindow
+    assert "SpeedrunHome" not in dialogs, "old SpeedrunHome key must be removed"
+    assert "SpeedrunMemory" not in dialogs, "old SpeedrunMemory key must be removed"
+
+
+def _make_bare_window():
+    """A SpeedrunWindow with a recording fake webview, bypassing Qt __init__."""
+    win = speedrun_mod.SpeedrunWindow.__new__(speedrun_mod.SpeedrunWindow)
+
+    class _FakeWeb:
+        def __init__(self) -> None:
+            self.loaded: list[str] = []
+
+        def load_sveltekit_page(self, page: str) -> None:
+            self.loaded.append(page)
+
+    win.web = _FakeWeb()
+    win._current_page = speedrun_mod.SpeedrunWindow.HOME_PAGE
+    return win
+
+
+def test_l2_reopen_navigates_only_when_route_differs() -> None:
+    # reopen(route) must be a NO-OP when the requested route matches the loaded
+    # page (Tools->Home while Home is open just raises the existing window), and
+    # must navigate IN-WEBVIEW when it differs (Tools->Memory reuses the window).
+    win = _make_bare_window()
+    assert win._current_page == speedrun_mod.SpeedrunWindow.HOME_PAGE
+
+    # Same route -> no navigation.
+    win.reopen(None, route=speedrun_mod.SpeedrunWindow.HOME_PAGE)
+    assert win.web.loaded == [], "same-route reopen must not reload the webview"
+
+    # Different route -> navigate once, and remember the new page.
+    win.reopen(None, route=speedrun_mod.SpeedrunWindow.MEMORY_PAGE)
+    assert win.web.loaded == [speedrun_mod.SpeedrunWindow.MEMORY_PAGE]
+    assert win._current_page == speedrun_mod.SpeedrunWindow.MEMORY_PAGE
+
+    # Reopening the now-current route is again a no-op.
+    win.reopen(None, route=speedrun_mod.SpeedrunWindow.MEMORY_PAGE)
+    assert win.web.loaded == [speedrun_mod.SpeedrunWindow.MEMORY_PAGE]
+
+
+def test_l2_open_memory_bridge_navigates_in_webview_no_second_window() -> None:
+    # The legacy "open:memory" bridge command spawned a 2nd dialog window; it must
+    # now navigate the SAME webview to the memory page and NEVER call
+    # aqt.dialogs.open (which would create/raise a separate window).
+    import aqt
+
+    win = _make_bare_window()
+
+    opened: list = []
+    orig_open = aqt.dialogs.open
+    aqt.dialogs.open = lambda *a, **k: opened.append((a, k))  # type: ignore
+    try:
+        win._on_bridge_cmd("open:memory")
+    finally:
+        aqt.dialogs.open = orig_open  # type: ignore
+
+    assert opened == [], "open:memory must not spawn/raise a second window"
+    assert win.web.loaded == [speedrun_mod.SpeedrunWindow.MEMORY_PAGE]
+    assert win._current_page == speedrun_mod.SpeedrunWindow.MEMORY_PAGE
+
+
+# ---- L2 issue #2: mini-mock session timer (Qt-free gate + mm:ss formatting) ----
+
+import aqt.speedrun_timer as speedrun_timer  # noqa: E402
+
+
+def test_l2_timer_deck_gate_predicate() -> None:
+    # Only a "Speedrun Mini-Mock" deck (by prefix, so an auto-suffixed duplicate
+    # counts) gets the timer; the exam deck / other decks / no deck do NOT.
+    assert speedrun_timer.is_mini_mock_deck_name("Speedrun Mini-Mock") is True
+    assert speedrun_timer.is_mini_mock_deck_name("Speedrun Mini-Mock+") is True
+    assert speedrun_timer.is_mini_mock_deck_name("Speedrun Mini-Mock++") is True
+    assert speedrun_timer.is_mini_mock_deck_name("Speedrun::GRE Math") is False
+    assert speedrun_timer.is_mini_mock_deck_name("Default") is False
+    assert speedrun_timer.is_mini_mock_deck_name("") is False
+    assert speedrun_timer.is_mini_mock_deck_name(None) is False
+
+
+def test_l2_timer_format_mmss_counts_up_honestly() -> None:
+    # Count-UP mm:ss. Minutes are NOT capped at 59 (honest elapsed, not a clock),
+    # and a negative (clock skew) clamps to 00:00 — never a fake countdown.
+    assert speedrun_timer.format_mmss(0) == "00:00"
+    assert speedrun_timer.format_mmss(5) == "00:05"
+    assert speedrun_timer.format_mmss(65) == "01:05"
+    assert speedrun_timer.format_mmss(599) == "09:59"
+    assert speedrun_timer.format_mmss(3599) == "59:59"
+    assert speedrun_timer.format_mmss(3600) == "60:00"  # not capped at 59
+    assert speedrun_timer.format_mmss(-10) == "00:00"  # clamp, no negative
