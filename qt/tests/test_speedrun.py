@@ -1063,3 +1063,170 @@ def test_no_double_dispatch_alias_reintroduced() -> None:
         "expected a single shared set_bridge_command wiring, "
         f"found {src.count('set_bridge_command(')}"
     )
+
+
+# ---- L1: Problem-card flow (issue #6) — confidence gate / lock / restore ----
+#
+# These pin the CARD-TEMPLATE JS/CSS produced by speedrun/seed/build_seed_deck.py
+# (the qfmt/afmt/css strings baked into the Problem note type). The four confirmed
+# sub-bugs and their template-only fixes:
+#   (a) Sure/Think/Guess had no selected state — now classed .speedrun-conf-btn
+#       with a .speedrun-conf-selected CSS state applied on click/restore.
+#   (b) The bet was never locked in the UI — first click locks the sibling buttons.
+#   (c) No confidence-before-answer gate — choices are inert until a bet is placed.
+#   (d) The MCQ pick was lost on Show Answer — the afmt {{FrontSide}} re-renders the
+#       qfmt, so state must be persisted (sessionStorage, keyed by a stem
+#       FINGERPRINT since no {{cid}} token exists) and re-applied by a restoreState()
+#       that runs on EVERY script load WITHOUT re-firing pycmd.
+# The logged calibration + MCQ pycmd payloads must stay byte-identical (only added
+# guarding/restoring). build_seed_deck imports genanki (absent from the qt pyenv),
+# so we import it under a tiny genanki stub that captures the Model kwargs, letting
+# us read the exact generated template strings without a rebuild.
+
+import importlib.util as _l1_importlib_util  # noqa: E402
+import pathlib as _l1_pathlib  # noqa: E402
+import sys as _l1_sys  # noqa: E402
+import types as _l1_types  # noqa: E402
+
+
+def _l1_load_build_seed_deck():
+    """Import speedrun/seed/build_seed_deck.py under a genanki stub and return the
+    module. The stub's Model records (templates, css) so the tests can read the
+    generated qfmt/afmt/css strings verbatim — no genanki install, no apkg rebuild.
+    """
+    g = _l1_types.ModuleType("genanki")
+
+    class _Model:
+        def __init__(self, model_id, name, fields=None, templates=None, css=""):
+            self.model_id = model_id
+            self.name = name
+            self.fields = fields
+            self.templates = templates
+            self.css = css
+
+    class _Deck:
+        def __init__(self, *a, **k):
+            pass
+
+        def add_note(self, *a, **k):
+            pass
+
+    class _Note:
+        def __init__(self, *a, **k):
+            pass
+
+    class _Package:
+        def __init__(self, *a, **k):
+            pass
+
+        def write_to_file(self, *a, **k):
+            pass
+
+    g.Model = _Model
+    g.Deck = _Deck
+    g.Note = _Note
+    g.Package = _Package
+    g.guid_for = lambda *a, **k: "g"
+
+    saved = _l1_sys.modules.get("genanki")
+    _l1_sys.modules["genanki"] = g
+    try:
+        here = _l1_pathlib.Path(__file__).resolve()
+        # repo_root/speedrun/seed/build_seed_deck.py — the qt tests live in
+        # repo_root/qt/tests, so go up two to the repo root.
+        bsd_path = (
+            here.parent.parent.parent / "speedrun" / "seed" / "build_seed_deck.py"
+        )
+        assert bsd_path.exists(), f"build_seed_deck.py not found at {bsd_path}"
+        spec = _l1_importlib_util.spec_from_file_location("_l1_bsd", bsd_path)
+        mod = _l1_importlib_util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        return mod
+    finally:
+        if saved is not None:
+            _l1_sys.modules["genanki"] = saved
+        else:
+            _l1_sys.modules.pop("genanki", None)
+
+
+def _l1_problem_template():
+    mod = _l1_load_build_seed_deck()
+    tmpl = mod.PROBLEM_MODEL.templates[0]
+    return tmpl["qfmt"], tmpl["afmt"], mod.PROBLEM_MODEL.css
+
+
+def test_l1_conf_buttons_are_classed_and_have_selected_css() -> None:
+    # (a) The confidence buttons must carry the .speedrun-conf-btn class + a
+    # data-level, and the CSS must define the .speedrun-conf-selected state so a
+    # picked bet visibly highlights. Bare inline-onclick buttons had none of this.
+    qfmt, _afmt, css = _l1_problem_template()
+    assert "speedrun-conf-btn" in qfmt, "conf buttons must be classed"
+    assert 'data-level="sure"' in qfmt
+    assert 'data-level="think"' in qfmt
+    assert 'data-level="guess"' in qfmt
+    assert "speedrun-conf-selected" in css, "selected-state CSS must exist"
+
+
+def test_l1_conf_block_precedes_choices() -> None:
+    # (c) Visual order must match the enforced flow: place the confidence block
+    # ABOVE {{Choices}} so the learner bets before the options are shown.
+    qfmt, _afmt, _css = _l1_problem_template()
+    conf_at = qfmt.find("speedrun-conf-btn")
+    choices_at = qfmt.find("{{Choices}}")
+    assert conf_at != -1 and choices_at != -1
+    assert conf_at < choices_at, "confidence block must render before {{Choices}}"
+
+
+def test_l1_persists_state_and_restores_without_refiring() -> None:
+    # (b)+(d) State must persist to sessionStorage (keyed by a stem fingerprint,
+    # since no {{cid}} token exists) and be re-applied by a restoreState() that runs
+    # on EVERY load — so Show Answer / {{FrontSide}} re-render keeps the selection
+    # and lock without re-firing pycmd.
+    qfmt, _afmt, _css = _l1_problem_template()
+    assert "sessionStorage" in qfmt, "state must be persisted to sessionStorage"
+    assert "restoreState" in qfmt, "a restoreState() must re-apply the UI on load"
+    # The old runtime-only data-locked early-return is replaced by a
+    # fingerprint/sessionStorage check — no bare `data-locked` gate remains.
+    assert "getAttribute('data-locked')" not in qfmt, (
+        "the broken data-locked runtime early-return must be gone"
+    )
+
+
+def test_l1_choices_gated_until_bet_placed() -> None:
+    # (c) The MCQ pick() must be inert until a confidence bet is placed. Guard that
+    # pick() consults the persisted confidence before locking/sending.
+    qfmt, _afmt, _css = _l1_problem_template()
+    # The gate reads the stored confidence key; if absent, pick() bails.
+    assert "speedrun:conf:" in qfmt  # the persisted conf key prefix is referenced
+    # An inert visual class for the not-yet-enabled choices.
+    assert "speedrun-choice-inert" in qfmt or "speedrun-choice-inert" in _afmt, (
+        "choices need an inert-until-bet visual state"
+    )
+
+
+def test_l1_pycmd_payloads_unchanged() -> None:
+    # The logged calibration + MCQ payloads must stay byte-identical (we only ADD
+    # guarding/restoring; we never change what is sent to the backend).
+    qfmt, _afmt, _css = _l1_problem_template()
+    # Confidence payloads: exact strings the desktop hook parses.
+    assert "pycmd('speedrun:conf:sure')" in qfmt
+    assert "pycmd('speedrun:conf:think')" in qfmt
+    assert "pycmd('speedrun:conf:guess')" in qfmt
+    # MCQ payload: the letter-suffixed command (pycmd + bridgeCommand fallback).
+    assert "pycmd('speedrun:mcq:'+letter)" in qfmt
+    assert "bridgeCommand('speedrun:mcq:'+letter)" in qfmt
+    # And the hidden visual-only key span is preserved.
+    assert '<span id="mcq-key"' in qfmt
+
+
+def test_l1_fingerprint_derived_from_stem_not_leaking_across_cards() -> None:
+    # No {{cid}} token exists, so state is keyed by a per-card STEM fingerprint.
+    # Guard that the template hashes a stem-derived value into the storage key
+    # (so two different cards don't share sessionStorage state).
+    qfmt, _afmt, _css = _l1_problem_template()
+    # A fingerprint host carrying the raw {{Stem}} for hashing, and a fingerprint
+    # function feeding the storage key.
+    assert "speedrun-fp" in qfmt, "a stem-fingerprint source must exist in qfmt"
+    assert "fingerprint" in qfmt or "fp(" in qfmt, (
+        "a fingerprint routine must derive the per-card storage key"
+    )

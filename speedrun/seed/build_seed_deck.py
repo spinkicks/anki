@@ -103,30 +103,63 @@ FADED_REVEAL_JS = (
     "})();</script>"
 )
 
-# Interactive MCQ auto-grade (thesis-critical: Performance is OBJECTIVELY
-# key-checked, not self-rated). The Choices field renders 5 CLICKABLE options
-# (see _format_choices). This qfmt script wires them: on the first click it locks
-# the selection, fires pycmd("speedrun:mcq:<LETTER>") so the desktop reviewer
-# hook (aqt/speedrun_capture.py) can key-check the pick backend-side, and marks
-# the correct option green (and, if wrong, the chosen one red). The correct
-# letter used for VISUAL marking only comes from a hidden {{CorrectAnswer}} span
-# in the field HTML (id="mcq-key") — the AUTHORITATIVE grade is computed backend
-# side against the note field, never trusted from this client display value.
-# Graceful degradation: if pycmd/bridgeCommand is absent (e.g. a plain preview),
-# the click still marks visually and never throws; if JS is off entirely, the
-# choices still render (they are plain elements in the field) as a static list.
+# Interactive MCQ auto-grade + pre-answer confidence GATE/LOCK (thesis-critical:
+# Performance is OBJECTIVELY key-checked, not self-rated). One qfmt script wires
+# BOTH the confidence buttons and the clickable choices so the enforced flow is:
+#   bet your confidence FIRST  ->  that unlocks + locks the choices  ->  pick once.
+#
+# Why one script and why sessionStorage (issue #6). Anki re-renders the whole
+# qfmt on the answer side via {{FrontSide}}, and templates expose NO {{cid}}
+# token, so a runtime-only attribute (the old data-locked flag) is wiped on every
+# render and the pick/bet was lost on "Show Answer". Instead we persist the chosen
+# confidence LEVEL and MCQ LETTER to sessionStorage keyed by a per-card STEM
+# FINGERPRINT (a hash of the stem text — see #speedrun-fp), and a restoreState()
+# that runs on EVERY script load re-applies the selected/locked/correct/wrong +
+# aria-disabled UI WITHOUT re-firing any pycmd. The fingerprint keys state per
+# card so it never leaks across cards.
+#
+# The pycmd payloads are UNCHANGED from before: a confidence button still fires
+# pycmd("speedrun:conf:<level>") and a choice still fires
+# pycmd("speedrun:mcq:<LETTER>") (bridgeCommand fallback) — we only ADD guarding
+# (choices inert until a bet is placed; each control locks on first real click)
+# and restoring (re-apply persisted state on re-render). The desktop hook
+# (aqt/speedrun_capture.py) is the authority: it stashes only PRE-answer signals
+# (is_question_state) and key-checks the pick against the note's CorrectAnswer.
+# The hidden {{CorrectAnswer}} span (id="mcq-key") is used for VISUAL marking only.
+# Graceful degradation: if pycmd/bridgeCommand is absent (plain preview / Android
+# MVP) clicks still mark/lock and never throw; if JS is off entirely the choices
+# still render as a static list and the confidence buttons keep their inline
+# onclick pycmd (fired once).
 MCQ_CHOICES_JS = (
     '<span id="mcq-key" style="display:none">{{CorrectAnswer}}</span>'
     "<script>(function(){"
-    "var host=document.getElementById('speedrun-choices');"
-    "if(!host){return;}"
-    # Idempotent: {{FrontSide}} re-runs this on the answer side, but the pick is
-    # already locked there (data-locked set), so bail without rebinding.
-    "if(host.getAttribute('data-locked')){return;}"
+    "var choicesHost=document.getElementById('speedrun-choices');"
+    "var confHost=document.getElementById('speedrun-conf');"
+    "var fpEl=document.getElementById('speedrun-fp');"
+    "if(!choicesHost&&!confHost){return;}"
+    # Per-card storage key from a stem FINGERPRINT (no {{cid}} token exists). Hash
+    # the raw stem text (djb2) so two different cards never share sessionStorage
+    # state. Falls back to a constant if the fingerprint source is missing.
+    "function fingerprint(s){var h=5381;for(var i=0;i<s.length;i++){"
+    "h=((h<<5)+h+s.charCodeAt(i))|0;}return (h>>>0).toString(36);}"
+    "var fp=fpEl?fingerprint((fpEl.textContent||'').trim()):'x';"
+    "var confKey='speedrun:conf:'+fp;"
+    "var mcqKey='speedrun:mcq:'+fp;"
+    "function load(k){try{return sessionStorage.getItem(k);}catch(e){return null;}}"
+    "function save(k,v){try{sessionStorage.setItem(k,v);}catch(e){}}"
     "var keyEl=document.getElementById('mcq-key');"
     "var key=keyEl?(keyEl.textContent||'').trim().toUpperCase():'';"
-    "var choices=host.querySelectorAll('.speedrun-choice');"
-    "function send(letter){"
+    "var choices=choicesHost?"
+    "choicesHost.querySelectorAll('.speedrun-choice'):[];"
+    "var confBtns=confHost?"
+    "confHost.querySelectorAll('.speedrun-conf-btn'):[];"
+    "function sendConf(level){"
+    "try{"
+    "if(typeof pycmd==='function'){pycmd('speedrun:conf:'+level);}"
+    "else if(typeof bridgeCommand==='function'){"
+    "bridgeCommand('speedrun:conf:'+level);}"
+    "}catch(e){}}"
+    "function sendMcq(letter){"
     # Prefer pycmd (desktop); fall back to bridgeCommand; no-op if neither exists
     # (plain preview / Android MVP) so a click never throws.
     "try{"
@@ -134,22 +167,61 @@ MCQ_CHOICES_JS = (
     "else if(typeof bridgeCommand==='function'){"
     "bridgeCommand('speedrun:mcq:'+letter);}"
     "}catch(e){}}"
-    "function pick(ev){"
-    "if(host.getAttribute('data-locked')){return;}"
-    "var btn=ev.currentTarget;"
-    "var letter=(btn.getAttribute('data-letter')||'').toUpperCase();"
-    "host.setAttribute('data-locked','1');"
-    # Send the chosen letter FIRST (grade is backend-side); then mark visually.
-    "send(letter);"
+    # ---- gate: choices are inert (visually + behaviourally) until a bet exists.
+    "function setChoicesEnabled(on){"
+    "if(!choicesHost){return;}"
     "for(var i=0;i<choices.length;i++){"
     "var c=choices[i];"
+    "if(on){c.classList.remove('speedrun-choice-inert');"
+    "c.removeAttribute('aria-disabled');}"
+    "else{c.classList.add('speedrun-choice-inert');"
+    "c.setAttribute('aria-disabled','true');}}}"
+    # ---- restoreState: re-apply persisted selection/lock on EVERY load, never
+    # re-firing pycmd. This is what keeps the bet + pick after {{FrontSide}}.
+    "function restoreState(){"
+    "var lvl=load(confKey);"
+    "for(var i=0;i<confBtns.length;i++){"
+    "var b=confBtns[i];"
+    "var bl=(b.getAttribute('data-level')||'');"
+    "if(lvl){b.setAttribute('aria-disabled','true');"
+    "if(bl===lvl){b.classList.add('speedrun-conf-selected');}}}"
+    # A bet exists -> choices are enabled; otherwise they stay inert.
+    "setChoicesEnabled(!!lvl);"
+    "var chosen=load(mcqKey);"
+    "if(chosen){"
+    "for(var j=0;j<choices.length;j++){"
+    "var c=choices[j];"
     "c.setAttribute('aria-disabled','true');"
     "var l=(c.getAttribute('data-letter')||'').toUpperCase();"
     "if(key&&l===key){c.classList.add('speedrun-correct');}"
-    "else if(l===letter){c.classList.add('speedrun-wrong');}"
-    "}}"
+    "else if(l===chosen){c.classList.add('speedrun-wrong');}}}}"
+    # ---- pickConf: first real bet. Persist, lock siblings, fire pycmd, unlock
+    # choices. Guarded so a re-render click (already locked) can't re-fire.
+    "function pickConf(ev){"
+    "if(load(confKey)){return;}"
+    "var btn=ev.currentTarget;"
+    "var level=(btn.getAttribute('data-level')||'');"
+    "if(!level){return;}"
+    "save(confKey,level);"
+    "sendConf(level);"
+    "restoreState();}"
+    # ---- pick: choose an option. GATED: inert until a bet is placed. Guarded so
+    # a re-render click (already locked) can't re-fire.
+    "function pick(ev){"
+    "if(!load(confKey)){return;}"  # confidence GATE: no bet -> choices inert
+    "if(load(mcqKey)){return;}"
+    "var btn=ev.currentTarget;"
+    "var letter=(btn.getAttribute('data-letter')||'').toUpperCase();"
+    "if(!letter){return;}"
+    "save(mcqKey,letter);"
+    # Send the chosen letter FIRST (grade is backend-side); then mark visually.
+    "sendMcq(letter);"
+    "restoreState();}"
+    "for(var i=0;i<confBtns.length;i++){"
+    "confBtns[i].addEventListener('click',pickConf);}"
     "for(var i=0;i<choices.length;i++){"
     "choices[i].addEventListener('click',pick);}"
+    "restoreState();"  # run on EVERY load so re-renders keep the UI
     "})();</script>"
 )
 
@@ -177,37 +249,54 @@ PROBLEM_MODEL = genanki.Model(
     templates=[
         {
             "name": "Card 1",
-            # Pre-answer confidence buttons (desktop calibration self-bet). Each
-            # fires pycmd("speedrun:conf:<level>"); the desktop reviewer hook
-            # (aqt/speedrun_capture.py) reads the card id from context and logs
-            # the attempt on answer. Anki templates expose NO card-id token, so
-            # the level is the only payload. Inert/harmless on Android (no handler
-            # registered there in the MVP — no persistence, no error).
+            # Enforced flow (issue #6): bet your confidence FIRST -> that unlocks
+            # the choices -> pick once. The confidence block is placed ABOVE
+            # {{Choices}} so visual order matches the gate, and MCQ_CHOICES_JS
+            # (which wires BOTH controls) is emitted LAST so every element exists.
             "qfmt": "{{Stem}}"
-            '<div style="margin-top:8px">{{Choices}}</div>'
-            # Interactive MCQ: wire the clickable choices (lock + pycmd + visual
-            # mark). Placed after the Choices field so the elements exist. The
-            # backend key-checks the pick; this only marks + reports the letter.
-            + MCQ_CHOICES_JS
+            # Hidden stem fingerprint source: MCQ_CHOICES_JS hashes this text into a
+            # per-card sessionStorage key (no {{cid}} token exists), so persisted
+            # bet/pick state never leaks across cards.
+            '<span id="speedrun-fp" style="display:none">{{Stem}}</span>'
             # LS2 example-first: for flagged (weak/novice) items show the fully
-            # worked solution as a study EXAMPLE before the learner attempts it.
+            # worked solution as a study EXAMPLE before the learner bets/attempts.
             # Content flag only (non-empty ExampleFirst field) — no scheduling.
             + "{{#ExampleFirst}}"
             '<div style="margin-top:12px;padding:8px;border-left:3px solid #7aa;'
             'background:rgba(120,170,170,0.08)">'
             '<div style="font-size:11px;color:#888;margin-bottom:4px">'
-            "Worked example (study this first, then solve above):</div>"
+            "Worked example (study this first, then solve below):</div>"
             "{{WorkedSolution}}</div>"
             "{{/ExampleFirst}}"
+            # Pre-answer confidence buttons (desktop calibration self-bet), ABOVE
+            # the choices. Each still fires pycmd("speedrun:conf:<level>") (byte
+            # -identical payload) so the desktop hook logs the attempt on answer;
+            # MCQ_CHOICES_JS ADDS the classed selected/locked state + sessionStorage
+            # persistence + restore. Anki templates expose NO card-id token, so the
+            # level is the only payload. Inert/harmless on Android (no handler
+            # registered there in the MVP — no persistence, no error). The inline
+            # onclick keeps a single pycmd firing even if the wiring script is off.
             '<div style="margin-top:12px;font-size:11px;color:#888">'
-            "How sure are you, before you check?</div>"
-            '<div style="margin-top:4px">'
-            "<button type=\"button\" onclick=\"pycmd('speedrun:conf:sure')\">"
+            "How sure are you, before you check? (bet to unlock the choices)</div>"
+            '<div id="speedrun-conf" style="margin-top:4px">'
+            '<button type="button" class="speedrun-conf-btn" data-level="sure" '
+            "onclick=\"pycmd('speedrun:conf:sure')\">"
             "Sure</button> "
-            "<button type=\"button\" onclick=\"pycmd('speedrun:conf:think')\">"
+            '<button type="button" class="speedrun-conf-btn" data-level="think" '
+            "onclick=\"pycmd('speedrun:conf:think')\">"
             "Think</button> "
-            "<button type=\"button\" onclick=\"pycmd('speedrun:conf:guess')\">"
-            "Guess</button></div>",
+            '<button type="button" class="speedrun-conf-btn" data-level="guess" '
+            "onclick=\"pycmd('speedrun:conf:guess')\">"
+            "Guess</button></div>"
+            # Choices AFTER the bet. They render inert (speedrun-choice-inert, set
+            # by _format_choices) until MCQ_CHOICES_JS enables them once a bet is
+            # persisted.
+            + '<div style="margin-top:12px">{{Choices}}</div>'
+            # Interactive MCQ + confidence wiring: lock + pycmd + visual mark +
+            # gate + restore. Emitted last so #speedrun-conf, #speedrun-fp and the
+            # choices all exist. The backend key-checks the pick; this only marks +
+            # reports the letter (payload unchanged).
+            + MCQ_CHOICES_JS,
             "afmt": '{{FrontSide}}<hr id="answer">'
             '<div style="margin-bottom:8px"><b>Answer: {{CorrectAnswer}}</b></div>'
             # LS2 faded worked-example: reveal the WorkedSolution one step at a
@@ -225,7 +314,10 @@ PROBLEM_MODEL = genanki.Model(
     # Clickable-choice styling. Large tap targets (min-height 44px, full-width,
     # block layout) render cleanly at 360px on phones. .speedrun-correct /
     # .speedrun-wrong are applied by MCQ_CHOICES_JS after a pick (green key, red
-    # wrong pick). Colours chosen to read on both light and dark Anki themes.
+    # wrong pick). .speedrun-choice-inert dims + disables the choices until a
+    # confidence bet is placed (the gate); .speedrun-conf-btn / -selected style the
+    # pre-answer confidence buttons and the picked (locked) one. Colours chosen to
+    # read on both light and dark Anki themes.
     css=(
         ".speedrun-choices{margin:0}"
         ".speedrun-choice{display:block;width:100%;box-sizing:border-box;"
@@ -234,12 +326,24 @@ PROBLEM_MODEL = genanki.Model(
         "color:inherit;font-size:inherit;line-height:1.4;cursor:pointer;"
         "-webkit-tap-highlight-color:transparent}"
         ".speedrun-choice[aria-disabled='true']{cursor:default}"
+        # Gate: choices are inert (dimmed, non-interactive) until a bet unlocks
+        # them. pointer-events:none also stops the click firing pick() early.
+        ".speedrun-choice.speedrun-choice-inert{opacity:0.45;cursor:not-allowed;"
+        "pointer-events:none}"
         ".speedrun-choice-letter{display:inline-block;min-width:1.6em;"
         "font-weight:bold}"
         ".speedrun-choice.speedrun-correct{border-color:#2e7d32;"
         "background:rgba(46,125,50,0.16)}"
         ".speedrun-choice.speedrun-wrong{border-color:#c62828;"
         "background:rgba(198,40,40,0.16)}"
+        # Pre-answer confidence buttons + selected/locked state.
+        ".speedrun-conf-btn{margin:0 4px 0 0;padding:8px 14px;min-height:40px;"
+        "border:1px solid #b8b8b8;border-radius:8px;background:transparent;"
+        "color:inherit;font-size:inherit;cursor:pointer;"
+        "-webkit-tap-highlight-color:transparent}"
+        ".speedrun-conf-btn[aria-disabled='true']{cursor:default}"
+        ".speedrun-conf-btn.speedrun-conf-selected{border-color:#1565c0;"
+        "border-width:2px;background:rgba(21,101,192,0.16);font-weight:bold}"
     ),
     # Bundled MathJax rendering is handled by Anki's built-in MathJax on \\( \\).
 )
@@ -287,13 +391,17 @@ def _format_choices(choices: list[str]) -> str:
     Each choice is a <button data-letter="X"> carrying its letter badge + the
     option text (LaTeX \\( \\) preserved for Anki's MathJax; see
     _choice_text_html for the <>/& handling). The elements are plain HTML, so if
-    JS is off they still render as a readable list; the click behaviour (lock +
-    pycmd + green/red marking) is attached by the qfmt script. No new field is
-    introduced — this only changes how Choices renders."""
+    JS is off they still render as a readable list; the click behaviour (gate +
+    lock + pycmd + green/red marking) is attached by the qfmt script. Each choice
+    starts with the speedrun-choice-inert class (the confidence GATE): MCQ_CHOICES_JS
+    removes it via setChoicesEnabled once a bet is persisted, so choices are
+    non-interactive until the learner bets. No new field is introduced — this only
+    changes how Choices renders."""
     items = []
     for letter, text in zip(CHOICE_LETTERS, choices):
         items.append(
-            f'<button type="button" class="speedrun-choice" data-letter="{letter}">'
+            '<button type="button" class="speedrun-choice speedrun-choice-inert" '
+            f'aria-disabled="true" data-letter="{letter}">'
             f'<span class="speedrun-choice-letter">{letter}</span> '
             f'<span class="speedrun-choice-text">{_choice_text_html(text)}</span>'
             "</button>"
