@@ -30,13 +30,13 @@ with an inline 95% confidence error-bracket band (bracket = interval, amber tick
         <td class="c-recall">—</td>
         <td class="c-band" colspan="2">
             <span class="locked">
+                <!-- DUAL-gate unlock copy (cards AND reviews) from @speedrun/data
+                     — the review-only "N more" understated the requirement. -->
                 <span class="abstain-full">
-                    NOT TIMED — review <b>{row.unlockN} more</b>
-                    to unlock a split
+                    NOT TIMED — <b>{row.unlockFull ?? ""}</b>
                 </span>
                 <span class="abstain-compact">
-                    🔒 <b>{row.unlockN} more</b>
-                    to unlock
+                    🔒 <b>{row.unlockCompact ?? ""}</b>
                 </span>
             </span>
         </td>

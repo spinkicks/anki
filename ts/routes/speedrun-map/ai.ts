@@ -24,10 +24,16 @@ function bridge(): Bridge | null {
     return null;
 }
 
+/** How many verified problems a "Generate practice" click asks the AI for. */
+export const GEN_BATCH_SIZE = 5;
+
 /** Result of a generate round-trip, pushed back by the Qt callback. */
 export interface GenResult {
     topic: string;
     added: number;
+    // How many problems were REQUESTED (batch size). Lets the UI report a
+    // partial batch honestly ("Added 2 of 5") instead of a bare success.
+    requested: number;
     error: string;
 }
 
@@ -69,7 +75,12 @@ export function probeAiAvailability(timeoutMs = 4000): Promise<boolean> {
 export function requestGenerate(topic: string, timeoutMs = 90000): Promise<GenResult> {
     const send = bridge();
     if (!send) {
-        return Promise.resolve({ topic, added: 0, error: "AI not available" });
+        return Promise.resolve({
+            topic,
+            added: 0,
+            requested: GEN_BATCH_SIZE,
+            error: "AI not available",
+        });
     }
     return new Promise<GenResult>((resolve) => {
         let done = false;
@@ -83,16 +94,31 @@ export function requestGenerate(topic: string, timeoutMs = 90000): Promise<GenRe
             finish({
                 topic: r?.topic ?? topic,
                 added: typeof r?.added === "number" ? r.added : 0,
+                // Default to the batch size when Qt omits it, so the toast can
+                // still frame a partial ("Added N of 5").
+                requested:
+                    typeof r?.requested === "number" ? r.requested : GEN_BATCH_SIZE,
                 error: r?.error ?? "",
             });
         window.setTimeout(
-            () => finish({ topic, added: 0, error: "timed out" }),
+            () =>
+                finish({
+                    topic,
+                    added: 0,
+                    requested: GEN_BATCH_SIZE,
+                    error: "timed out",
+                }),
             timeoutMs,
         );
         try {
             send("speedrun:gen:" + topic);
         } catch {
-            finish({ topic, added: 0, error: "AI not available" });
+            finish({
+                topic,
+                added: 0,
+                requested: GEN_BATCH_SIZE,
+                error: "AI not available",
+            });
         }
     });
 }

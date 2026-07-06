@@ -38,10 +38,10 @@ License: GNU AGPL, version 3 or later; http://www.gnu.org/licenses/agpl.html
     {#if row.abstained}
         <td class="recall">—</td>
         <td class="range" colspan="1">
-            <span class="abstain-full">
-                🔒 INSUFFICIENT DATA: review {row.unlockN} more to unlock
-            </span>
-            <span class="abstain-compact">🔒 {row.unlockN} more to unlock</span>
+            <!-- DUAL-gate unlock copy (cards AND reviews) from @speedrun/data —
+                 the review-only "N more" understated the requirement. -->
+            <span class="abstain-full">🔒 INSUFFICIENT DATA: {row.unlockFull ?? ""}</span>
+            <span class="abstain-compact">🔒 {row.unlockCompact ?? ""}</span>
         </td>
     {:else}
         <td class="recall">{Math.round(row.avgRecall * 100)}%</td>

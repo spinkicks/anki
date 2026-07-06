@@ -9,6 +9,7 @@ import {
     mapCalibrationResponse,
     mapScaffoldResponse,
     type ScaffoldResponseLike,
+    unlockCopy,
 } from "./data";
 
 // A real (non-abstained) UNIT Performance cell + an abstaining scaled Readiness
@@ -155,4 +156,51 @@ test("calibration defaults to abstain (honest) when fields are absent", () => {
     expect(h.ece).toBe(0);
     expect(h.attempts).toBe(0);
     expect(h.bins).toHaveLength(0);
+});
+
+// ISSUE #5: the abstain gate is DUAL (service.rs: graded_reviews < 20 ||
+// cards_with_data < 2). The unlock copy must reflect BOTH gates, not just the
+// review count — otherwise "0 more to unlock" shows while still abstained
+// because only 1 card has data.
+test("unlock copy reflects the reviews gate alone", () => {
+    // 2 cards have data (cards gate met) but only 5 graded reviews (< 20).
+    const c = unlockCopy(2, 5);
+    expect(c.cardsN).toBe(0);
+    expect(c.reviewsN).toBe(15);
+    // Copy names the review requirement and NOT a phantom card requirement.
+    expect(c.full).toBe("Review 15 more times to unlock");
+    expect(c.compact).toBe("15 reviews to unlock");
+});
+
+test("unlock copy reflects the cards gate alone", () => {
+    // Plenty of reviews (>= 20) but only 1 card has FSRS data (< 2). The old
+    // review-only logic would (wrongly) say "0 more to unlock" while abstained.
+    const c = unlockCopy(1, 40);
+    expect(c.cardsN).toBe(1);
+    expect(c.reviewsN).toBe(0);
+    expect(c.full).toBe("Study 1 more card to unlock");
+    expect(c.compact).toBe("1 card to unlock");
+});
+
+test("unlock copy reflects BOTH gates when both are unmet", () => {
+    // Fresh topic: 0 cards with data, 0 graded reviews — both gates unmet.
+    const c = unlockCopy(0, 0);
+    expect(c.cardsN).toBe(2);
+    expect(c.reviewsN).toBe(20);
+    expect(c.full).toBe("Study 2 more cards and review 20 more times to unlock");
+    expect(c.compact).toBe("2 cards · 20 reviews to unlock");
+});
+
+test("unlock copy pluralizes singular card/review correctly", () => {
+    const c = unlockCopy(1, 19);
+    expect(c.cardsN).toBe(1);
+    expect(c.reviewsN).toBe(1);
+    expect(c.full).toBe("Study 1 more card and review 1 more time to unlock");
+});
+
+test("unlock copy honors custom minReviews / minCards thresholds", () => {
+    const c = unlockCopy(3, 8, 10, 5);
+    expect(c.cardsN).toBe(2);
+    expect(c.reviewsN).toBe(2);
+    expect(c.full).toBe("Study 2 more cards and review 2 more times to unlock");
 });
